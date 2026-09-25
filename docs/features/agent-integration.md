@@ -9,7 +9,7 @@
 | 工具 | 作用 |
 | --- | --- |
 | `actions_list` | 列出当前工作区归一化后的任务摘要（id、label、detail、来源层、审批要求、本会话最新运行状态）——渐进式披露的第一层 |
-| `actions_run` | 按 id 启动任务，可带 `params`；返回结构化结果（见下） |
+| `actions_run` | 按 id 启动任务，可带 `params`；`wait: true` 时同步阻塞到终态（60 秒封顶，超时返回当前状态）——短任务（check/test/lint）零轮询拿终态，长任务（dev/publish）省略后接 `actions_inspect` 跟进；返回结构化结果（见下） |
 | `actions_inspect` | 查看完整定义与运行输出（按 `runId` 或 `actionId`；`actionId` 形式支持字节偏移增量读取） |
 | `actions_cancel` | 取消本会话的某个运行（显式停止的唯一途径；对终态运行调用安全） |
 | `actions_set_params` | 会话参数 pin 板：set / clear / list，按声明校验，值随会话销毁 |

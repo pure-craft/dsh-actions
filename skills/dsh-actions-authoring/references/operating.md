@@ -16,7 +16,7 @@ Read this when your task is running or managing actions, not writing them. For t
 
 **1. `actions_list` first.** It returns summaries only: id, label, detail, source layer, approval requirement, and the status of your own session's latest active run (`idle` when none), plus its `runId` when active. Use the ids from here everywhere else. If the human mentions an action you cannot see, the likely cause is `visibility: "ui"` — those entries are panel-only by design; do not try to work around it.
 
-**2. `actions_run` to start.** It returns one of the structured outcomes (next two sections). Keep the returned run's `id` — every later operation addresses runs by `runId`. When the action declares `inputs`, pass their values in the `params` argument.
+**2. `actions_run` to start.** It returns one of the structured outcomes (next two sections). Keep the returned run's `id` — every later operation addresses runs by `runId`. When the action declares `inputs`, pass their values in the `params` argument. For short tasks (check/test/lint — seconds), pass `wait: true` to block until the run settles and get the terminal summary in the same call (60s cap, then current state); for long tasks (dev servers, publishes) omit `wait` and follow with `actions_inspect`.
 
 **3. `actions_inspect` to follow.** Pass `runId` for a specific run, or `actionId` for the definition plus its latest run. Output is the retained window with a byte `offset`; the `actionId` form accepts that offset to read only what is new. Runs owned by other sessions read as `run-not-found` — that is isolation working, not the run being gone.
 
