@@ -1,0 +1,80 @@
+{
+  "version": "1.0.0",
+  "actions": [
+    {
+      "label": "check",
+      "icon": "fluent-emoji:check-mark-button",
+      "command": "pnpm check",
+      "detail": "提交前完整门禁：typecheck + lint + 全量测试"
+    },
+    {
+      "label": "typecheck",
+      "icon": "devicon:typescript",
+      "command": "pnpm run typecheck",
+      "detail": "仅 TypeScript 类型检查（内层快速循环）"
+    },
+    {
+      "label": "lint",
+      "icon": "twemoji:paintbrush",
+      "command": "pnpm run lint",
+      "detail": "仅 oxlint（内层快速循环）"
+    },
+    {
+      "label": "test",
+      "icon": "simple-icons:vitest",
+      "command": "pnpm test",
+      "detail": "Vitest 全量测试"
+    },
+    {
+      "label": "test-file",
+      "icon": "simple-icons:vitest",
+      "command": "FILE=\"${input:file}\"; FILE=\"${FILE#/}\"; if [ -f \"$FILE\" ]; then pnpm vitest run \"$FILE\"; else echo \"测试文件不存在: $FILE（请填相对路径，如 tests/rpc.spec.ts）\"; exit 1; fi",
+      "detail": "跑单个测试文件（内层快速循环，如 tests/rpc.spec.ts）",
+      "inputs": [
+        {
+          "id": "file",
+          "type": "string",
+          "description": "测试文件的相对路径，如 tests/rpc.spec.ts",
+          "required": true
+        }
+      ]
+    },
+    {
+      "label": "coverage",
+      "icon": "twemoji:bar-chart",
+      "command": "pnpm run test:coverage",
+      "detail": "测试并输出覆盖率报告"
+    },
+    {
+      "label": "build",
+      "icon": "noto:package",
+      "command": "pnpm build",
+      "detail": "tsdown 构建 host + client 产物"
+    },
+    {
+      "label": "dev",
+      "icon": "noto:eyes",
+      "command": "pnpm run dev",
+      "detail": "tsdown 监听模式（已排除 node_modules 等大目录）"
+    },
+    {
+      "label": "pack",
+      "icon": "noto:package",
+      "command": "pnpm build && pnpm pack",
+      "detail": "构建并打出分发 tgz（发布前产物）"
+    },
+    {
+      "label": "secret-scan",
+      "icon": "twemoji:mag",
+      "command": "grep -rniE \"(ghp_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9]{20,}|xox[bap]-[A-Za-z0-9-]{10,}|bearer [A-Za-z0-9._-]{20,})\" src tests skills docs README.md package.json && echo '⚠ 命中疑似敏感信息，请检查' || echo '✓ 敏感信息扫描通过'",
+      "detail": "推送远程前的敏感信息快扫（凭证模式 + 个人路径）"
+    },
+    {
+      "label": "publish",
+      "icon": "simple-icons:npm",
+      "command": "pnpm check && pnpm build && npm publish",
+      "detail": "发布到 npm（先跑完整门禁；每次运行都要人工批准）",
+      "approval": "always"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+node_modules/
+lib/
+coverage/
+.references/
+.DS_Store
+*.log
+.pnpm-store/
+.workbuddy/
+pnpm-workspace.yaml
+.npmrc
+
+# pnpm pack / publish artifacts
+*.tgz
+
+.idea/
+
+# team-private planning docs
+docs/private/
+AGENTS.md
+docs/temp/

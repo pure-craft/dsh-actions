@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "policy": "dsh-plugin-naming/v1",
+  "plugin": {
+    "namespace": "pure-craft",
+    "name": "actions",
+    "coordinate": "dsh-actions",
+    "packageName": "dsh-actions"
+  },
+  "names": {
+    "pluginNames": [
+      "dsh-actions"
+    ],
+    "loaderIds": [
+      "dsh-actions"
+    ],
+    "services": [],
+    "tools": [],
+    "commands": [],
+    "skills": [],
+    "skillProviders": [],
+    "events": [],
+    "settingsNamespaces": [],
+    "routes": [
+      {
+        "kind": "prefix",
+        "path": "/api/dsh-actions"
+      }
+    ]
+  }
+}

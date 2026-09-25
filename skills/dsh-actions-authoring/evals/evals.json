@@ -1,0 +1,71 @@
+{
+  "skill_name": "dsh-actions-authoring",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "我们这个仓库每次改完代码都要手动跑 pnpm check 和 pnpm build，很重复。帮我把这两个命令固化成项目任务，以后人和 agent 都能直接发现和运行。",
+      "expected_output": "Creates (or updates) the workspace `.dsh/actions.json` as JSONC with `\"version\": \"1.0.0\"` and two entries carrying label/command/detail; stays inside the supported schema (no dependsOn/platform blocks or other unsupported fields); chooses the workspace layer (not global) because the tasks are project-shared; verifies via actions_list or the panel source banner rather than assuming success.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Add a 'dev' action that runs the vite dev server for this project. Two requirements: it must be impossible to accidentally start a second instance, and it should be usable by agents but NOT show up as a button in the web panel.",
+      "expected_output": "Adds an entry with `runOptions.instancePolicy: \"reject\"` for exclusivity (not instanceLimit tricks, not documentation-only warnings) and `visibility: \"agent\"` to hide it from the panel while keeping tool access; valid JSONC with version gate; explains that 'rejected' is the structured outcome a duplicate request returns.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "帮我把项目的 dev server 起起来，确认它真的启动成功之后把访问地址告诉我。",
+      "expected_output": "Runs actions_list → actions_run, keeps the returned runId, then polls actions_inspect (the actionId form with offset for incremental reads) and judges readiness from the actual log text (e.g. the 'Local: http://…' line) instead of inventing a health-check flag or assuming success after a fixed sleep; reports the URL read from the output.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "Run the project's test action and tell me whether it passed. — Wait, actions_run says it's already running. Then just wait for the current one to finish and give me the result. Do NOT kill it.",
+      "expected_output": "Treats the `already-running` outcome as informational (not an error), attaches to the returned runId, follows it with actions_inspect until a terminal status, and reports status plus exit code; never calls actions_cancel and never retries actions_run in a loop; does not describe the reuse outcome as a failure.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "帮我加一个 clean-and-deploy 任务：先清空 dist，再重新构建并部署到生产环境。这是高危操作，别让人或 agent 随手就触发。",
+      "expected_output": "Adds the entry with `approval: \"always\"` (or at minimum `\"agent\"`), explaining the never/agent/always distinction and why destructive+deploying actions must carry approval; may also add `runOptions.instancePolicy: \"reject\"` for exclusivity; does not present an unguarded definition as acceptable.",
+      "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "项目里有个 deploy 任务需要指定目标环境。先帮我把它改成可传参的，然后用它部署到 production。",
+      "expected_output": "Authors an `inputs` declaration (id/type select with options/default as appropriate, `${input:env}` referenced verbatim in the command) — noting the no-quoting substitution rule; then runs it via actions_run with `params: { env: \"production\" }`; if a `missing required input` error or `approval-declined` outcome appears, handles it correctly (resend with params filled; respect a declined approval instead of retrying).",
+      "files": []
+    },
+    {
+      "id": 7,
+      "prompt": "这次迭代我们一直在给 staging 环境做验证，后面每次跑 deploy 都要传 env=staging 太啰嗦了。帮我把这个参数固定下来，之后直接跑就行——但别改项目的配置文件。",
+      "expected_output": "Uses actions_set_params with { actionId, values: { env: \"staging\" } } to pin the value on the session (explicitly NOT editing actions.json and NOT relying on any run history); then runs actions_run without params and confirms the pinned value applied (evaluation chain: explicit params > session pins > default); optionally mentions pins die with the session and how to list/unpin ({ actionId, clear: true }).",
+      "files": []
+    },
+    {
+      "id": 8,
+      "prompt": "帮我把「git status --short && git log --oneline -5」固化成项目任务 repo-overview，方便随时看一眼仓库状态。",
+      "expected_output": "Creates the workspace action, then — because the command is side-effect-free (read-only query) — verifies it by calling actions_run once and checking the output before declaring done; does not skip verification, and does not ask the user to test a read-only action themselves.",
+      "files": []
+    },
+    {
+      "id": 9,
+      "prompt": "给我加个 release 任务：先跑测试，过了就构建，然后按版本号打 tag 并推送，中间任何一步失败就停。",
+      "expected_output": "Recognizes the multi-step conditional logic does not belong in one command line: writes a workspace script (e.g. scripts/release.mjs) containing the step logic and points the action's command at it (`node scripts/release.mjs`), citing escaping/versioning/standalone-debugging benefits; since releasing has side effects, does NOT run it to verify — instead tells the user the action is ready and suggests testing when convenient.",
+      "files": []
+    },
+    {
+      "id": 10,
+      "prompt": "workspace 里有个 deploy 任务。这次会话我们只做 staging 验证，帮我造一个「部署到 staging」的会话专用入口，别把项目配置改了。",
+      "expected_output": "Uses actions_register with extends pointing at the workspace deploy action's id and params pinning env=staging (session layer, not editing actions.json); expects and respects the mandatory user-approval prompt; afterwards runs it via actions_run without params; if registration returns reason 'invalid-entry', reads the field-level issues, fixes exactly those fields, and resends.",
+      "files": []
+    },
+    {
+      "id": 11,
+      "prompt": "帮我把这个临时的日志采集命令注册成会话任务：…（命令里故意用了未声明的 ${input:level} 引用）。",
+      "expected_output": "On the structured invalid-entry result (registered: false with issues like a missing inputs declaration for the referenced ${input:level}), corrects the entry — declares the input or removes the reference — and resends, rather than retrying unchanged or giving up; keeps the entry session-scoped.",
+      "files": []
+    }
+  ]
+}

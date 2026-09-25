@@ -1,0 +1,106 @@
+{
+  "name": "dsh-actions",
+  "version": "0.1.0",
+  "description": "Run workspace and global actions from the DeepSeek Harness Web UI and agent tools — one definition for both.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./lib/index.js",
+  "types": "./lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json",
+    "./cordis.patch.yml": "./cordis.patch.yml"
+  },
+  "files": [
+    "lib",
+    "skills",
+    "cordis.patch.yml",
+    "README.md",
+    "AGENTS.md"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch --ignore-watch node_modules --ignore-watch .references --ignore-watch .pnpm-store --ignore-watch coverage --ignore-watch lib",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "oxlint --type-aware --tsconfig tsconfig.json src tests",
+    "check": "pnpm run typecheck && pnpm run lint && pnpm run test",
+    "clean": "rm -rf lib coverage",
+    "prepublishOnly": "pnpm run check && pnpm run build"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-sidebar-right",
+        "@deepseek-ai/dsh-client-ui-sidebar-documentpreview"
+      ],
+      "platform": "web"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2",
+    "@deepseek-ai/dsh-client-locale": "^0.1.7-alpha.2",
+    "@deepseek-ai/dsh-client-ui-layout": "^0.1.7-alpha.2",
+    "@deepseek-ai/dsh-client-ui-primitives": "^0.1.7-alpha.2",
+    "@deepseek-ai/dsh-client-ui-renderer": "^0.1.7-alpha.2",
+    "@deepseek-ai/dsh-client-ui-sidebar-documentpreview": "^0.1.7-alpha.2",
+    "@deepseek-ai/dsh-client-ui-sidebar-right": "^0.1.7-alpha.2",
+    "react": "*"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "4.0.2",
+    "@deepseek-ai/dsh-client-locale": "0.1.7-alpha.2",
+    "@deepseek-ai/dsh-client-ui-layout": "0.1.7-alpha.2",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.1.7-alpha.2",
+    "@deepseek-ai/dsh-client-ui-renderer": "0.1.7-alpha.2",
+    "@deepseek-ai/dsh-client-ui-sidebar-documentpreview": "0.1.7-alpha.2",
+    "@deepseek-ai/dsh-client-ui-sidebar-right": "0.1.7-alpha.2",
+    "@types/node": "^26.2.0",
+    "@types/react": "~18.3.1",
+    "@vitest/coverage-v8": "^4.1.11",
+    "oxlint": "^1.80.0",
+    "oxlint-tsgolint": "^7.0.2001",
+    "react": "^18.3.1",
+    "tsdown": "^0.15.6",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.8"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pure-craft/dsh-actions.git"
+  },
+  "homepage": "https://github.com/pure-craft/dsh-actions",
+  "bugs": {
+    "url": "https://github.com/pure-craft/dsh-actions/issues"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "tasks",
+    "taskfile",
+    "makefile",
+    "project-actions"
+  ],
+  "author": "PureCraft",
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "packageManager": "pnpm@10.17.1",
+  "dependencies": {
+    "@iconify/react": "^6.0.2",
+    "jsonc-parser": "^3.3.1",
+    "zod": "^4.6.5"
+  }
+}

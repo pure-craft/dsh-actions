@@ -1,0 +1,5 @@
+# DSH Actions bundle layer: mount the Host half. The Client half is discovered
+# through package.json exports["./client"] and dsh.client.
+- insert:
+    - id: dsh-actions
+      name: 'dsh-actions'
