@@ -72,7 +72,7 @@
     {
       "label": "publish",
       "icon": "simple-icons:npm",
-      "command": "pnpm check && pnpm build && npm publish",
+      "command": "pnpm check && pnpm build && npm --cache \"${TMPDIR:-/tmp}/dsh-actions-npm-cache\" publish",
       "detail": "发布到 npm（先跑完整门禁；每次运行都要人工批准）",
       "approval": "always"
     }
