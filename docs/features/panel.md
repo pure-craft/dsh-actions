@@ -2,7 +2,7 @@
 
 > 返回 [README](../../README.md) ｜ 相关：[配置参考](configuration.md) ｜ [Agent 集成](agent-integration.md) ｜ [会话层](session-layer.md)
 
-面板是给人用的主入口：在 DSH Web 会话中打开位于「对话 / 轨迹」之后的 **Actions** 标签页（绑定当前会话的工作区）。设计目标只有一个——让运行一个项目任务变成一次点击。
+面板是给人用的主入口：DSH Web 右侧栏「开始」页的 **Actions** 卡片（绑定当前会话的工作区；composer 统计条上还有一枚实时状态胶囊可直达）。设计目标只有一个——让运行一个项目任务变成一次点击。
 
 ## 任务列表
 

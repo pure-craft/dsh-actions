@@ -76,6 +76,6 @@ Action 定义的唯一来源是独立的 `actions.json`（**JSONC**：允许注�
 
 ## 变量替换与生效时机
 
-`${workspaceFolder}`、`${workspaceFolderBasename}`、`${userHome}`、`${env:NAME}`、`${input:id}`；每次运行重新求值。**保存任一 `actions.json` 即自动生效**——Host 轮询各层配置并把刷新后的目录推送到每个打开的标签页，面板工具栏的刷新按钮是手动兜底。
+`${workspaceFolder}`、`${workspaceFolderBasename}`、`${userHome}`、`${env:NAME}`、`${input:id}`；每次运行重新求值。**保存任一 `actions.json` 即自动生效**——Host 轮询各层配置并把刷新后的目录推送到每个打开的面板，面板工具栏的刷新按钮是手动兜底。
 
 不支持的能力：`type: process`、command 型 inputs、`dependsOn`、`problemMatcher`、平台覆盖块等。
