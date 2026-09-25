@@ -491,6 +491,13 @@ function createRunTool(deps: ActionToolsDeps): ToolDefinitionLike {
             'Missing required inputs fail with a structured error listing what to provide.',
         },
         workspace: WORKSPACE_PARAMETER,
+        wait: {
+          type: 'boolean',
+          description:
+            'Block until the run settles and return the terminal summary (capped at 60s — ' +
+            'a longer run returns its current state at the cap). Use for short tasks (check/test/lint); ' +
+            'omit for long-running ones (dev/publish) and follow with actions_inspect instead.',
+        },
       },
       required: ['actionId'],
       additionalProperties: false,
@@ -544,8 +551,21 @@ function createRunTool(deps: ActionToolsDeps): ToolDefinitionLike {
         throw new ActionToolError('invalid-params', enrichParamsError(`Action "${action.label}": ${message}`, action));
       }
       const evaluated = evaluateAction(action, workspace, normalized.values);
+      // wait: block to terminal state for short tasks (60s cap); a run past
+      // the cap returns its current summary instead of hanging the call.
+      const maybeWait = async (result: RunStartResult): Promise<RunStartResult> => {
+        if (record.wait !== true) return result;
+        if (result.kind !== 'started' && result.kind !== 'already-running') return result;
+        const settled = await Promise.race([
+          deps.runs.waitForSettled(result.run.id),
+          new Promise<ActionRunSummary>((resolve) => {
+            setTimeout(() => { resolve(deps.runs.inspect(result.run.id).run); }, 60_000);
+          }),
+        ]);
+        return { ...result, run: settled };
+      };
       const conflict = conflictPrecheck(deps, action, agent.id, normalized.values);
-      if (conflict !== undefined) return conflict;
+      if (conflict !== undefined) return maybeWait(conflict);
       const declined = await requestRunApproval(deps, action, evaluated, normalized.values, exec, agent);
       if (declined !== undefined) return declined;
       const options: {
@@ -569,7 +589,7 @@ function createRunTool(deps: ActionToolsDeps): ToolDefinitionLike {
       // pin board is then a no-op (explicit keys win identically).
       options.params = normalized.values;
       try {
-        return await deps.runs.run(action, options);
+        return await maybeWait(await deps.runs.run(action, options));
       } catch (error) {
         // T33: params failures list the declared inputs so the agent can
         // self-correct and resend with values.

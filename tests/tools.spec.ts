@@ -285,6 +285,22 @@ describe('actions_run', () => {
     expect(runs.runCalls[0]?.options.sessionId).toBe('session-1');
   });
 
+  it('wait: true blocks to the terminal summary and returns it on the started result', async () => {
+    const { get } = makeFixture();
+    const result = (await get('actions_run').execute({ actionId: 'workspace:build', wait: true }, AGENT_EXEC)) as RunStartResult;
+    expect(result.kind).toBe('started');
+    // FakeRunService.waitForSettled resolves with a succeeded summary.
+    expect((result as { run: { status: string } }).run.status).toBe('succeeded');
+  });
+
+  it('wait also applies to an already-running conflict result', async () => {
+    const { get, runs } = makeFixture();
+    runs.runs.push(makeRun({ status: 'running' }));
+    const result = (await get('actions_run').execute({ actionId: 'workspace:build', wait: true }, AGENT_EXEC)) as RunStartResult;
+    expect(result.kind).toBe('already-running');
+    expect((result as { run: { status: string } }).run.status).toBe('succeeded');
+  });
+
   it('T15: rejects agentless run/inspect/cancel while list stays definition-only', async () => {
     const { get, runs } = makeFixture();
     runs.runs.push(makeRun()); // another session's active run exists
