@@ -80,7 +80,7 @@
     "type": "git",
     "url": "git+https://github.com/pure-craft/dsh-actions.git"
   },
-  "homepage": "https://github.com/pure-craft/dsh-actions",
+  "homepage": "https://github.com/pure-craft/dsh-actions#readme",
   "bugs": {
     "url": "https://github.com/pure-craft/dsh-actions/issues"
   },
