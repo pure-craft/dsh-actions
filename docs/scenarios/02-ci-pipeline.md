@@ -1,6 +1,6 @@
 # 场景：打通 CI/发布流水线（以 Jenkins 为例）
 
-> 返回 [README](../../README.md) ｜ 相关：[配置参考](../features/configuration.md)（inputs / approval 完整语义）｜ 场景：[桥接脚本入口](01-bridge-scripts.md) ｜ [会话草稿本](03-session-scratchpad.md)
+> 返回 [README](../../README.md) ｜ 相关：[配置参考](../features/configuration.md)（inputs / approval 完整语义）｜ 场景：[策展散落的脚本入口](01-curate-scripts.md) ｜ [会话草稿本](03-session-scratchpad.md)
 
 ## 痛点
 

@@ -1,6 +1,6 @@
 # 配置参考：actions.json 全字段
 
-> 返回 [README](../../README.md) ｜ 相关：场景文档（[桥接脚本](../scenarios/01-bridge-scripts.md) / [CI 流水线](../scenarios/02-ci-pipeline.md) / [会话草稿本](../scenarios/03-session-scratchpad.md)）｜ [面板](panel.md) ｜ [会话层](session-layer.md)
+> 返回 [README](../../README.md) ｜ 相关：场景文档（[策展散落的脚本入口](../scenarios/01-curate-scripts.md) / [CI 流水线](../scenarios/02-ci-pipeline.md) / [会话草稿本](../scenarios/03-session-scratchpad.md)）｜ [面板](panel.md) ｜ [会话层](session-layer.md)
 
 Action 定义的唯一来源是独立的 `actions.json`（**JSONC**：允许注释与尾逗号），分三层读取，合并优先级递增：
 

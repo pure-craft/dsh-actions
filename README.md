@@ -28,7 +28,7 @@ VS Code Tasks 的答案是「不用离开编辑器」。DSH Actions 更进一步
 3. **固化与复用**——工作区层随仓库提交，就是团队共享（新同事 clone 下来就有全套任务）；全局层是个人跨项目；只在当前会话有意义的任务放会话层，用完即弃，经得起用的再提升到文件层；
 4. **人与 Agent 共用同一套定义**——人固化一次，Agent 在任何会话里都能调用；Agent 在工作中固化的任务，人点开就能复跑。
 
-![Agent 调用带审批的任务：引用 → 加载 skill → 尊重审批 → 人工闸门](docs/assets/agent-approval-flow.png)
+![Agent 调用带审批的任务：引用 → 加载 skill → 尊重审批 → 人工闸门](https://raw.githubusercontent.com/pure-craft/dsh-actions/main/docs/assets/agent-approval-flow.png)
 
 输出不只是文本：实时流式出现在 run tab 工作区，状态徽章一眼可读；失败即停、随时重跑；重复触发不会起重复实例，而是定位到正在跑的那个；把任务或某次运行以 chip 引用发给 Agent，就能接着输出继续追问。
 
@@ -36,19 +36,21 @@ VS Code Tasks 的答案是「不用离开编辑器」。DSH Actions 更进一步
 
 配置的唯一来源是独立的 `actions.json`（JSONC）——不提供、也不计划提供对其他任务格式的运行时导入或桥接。
 
-> **现状**：Agent 侧的主动发现目前还比较弱。任务清单不会自动进入 Agent 的上下文，它得先自己调 `actions_list` 才知道有哪些任务。让 Agent 更主动地发现和使用这批任务，是接下来的主要方向。
+> **现状**：Agent 侧的主动发现目前还比较弱。任务清单不会自动进入 Agent 的上下文，它得先自己调 `actions_list` 才知道有哪些任务。「在会话框直接触发一次运行、把结果回插进对话」也还没做。眼下的状态是——**被人引用时很顺，主动发现并调用还谈不上**。让 Agent 更主动地发现和使用这批任务，是接下来的主要方向。
 
 ## 目录
 
 - [安装](#安装)
 - [界面](#界面)
 - [30 秒跑通](#30-秒跑通)
+- [一份配置，两个面](#一份配置两个面)
 - [使用场景](#使用场景)
 - [项目起源](#项目起源)
 - [三层设计](#三层设计)
 - [文档地图](#文档地图)
 - [包身份](#包身份)
 - [致谢](#致谢)
+- [License](#license)
 
 ## 安装
 
@@ -101,9 +103,9 @@ node scripts/verify-floor.mjs 0.1.5-rc.3      # 列出缺失的 20 个
 
 | 右侧栏入口 | 面板总览 | 参数 Modal |
 | --- | --- | --- |
-| ![开始页的 Actions 卡片](docs/assets/guide-entry.png) | ![三层分区的任务面板](docs/assets/panel-overview.png) | ![带参数的任务运行前弹出参数 Modal](docs/assets/params-modal.png) |
+| ![开始页的 Actions 卡片](https://raw.githubusercontent.com/pure-craft/dsh-actions/main/docs/assets/guide-entry.png) | ![三层分区的任务面板](https://raw.githubusercontent.com/pure-craft/dsh-actions/main/docs/assets/panel-overview.png) | ![带参数的任务运行前弹出参数 Modal](https://raw.githubusercontent.com/pure-craft/dsh-actions/main/docs/assets/params-modal.png) |
 | **运行输出** | **`/actions:` 引用菜单** | |
-| ![run tab 工作区的实时输出](docs/assets/run-output.png) | ![输入 / 选择任务，引用进对话](docs/assets/slash-menu.png) | |
+| ![run tab 工作区的实时输出](https://raw.githubusercontent.com/pure-craft/dsh-actions/main/docs/assets/run-output.png) | ![输入 / 选择任务，引用进对话](https://raw.githubusercontent.com/pure-craft/dsh-actions/main/docs/assets/slash-menu.png) | |
 
 ## 30 秒跑通
 
@@ -118,13 +120,28 @@ node scripts/verify-floor.mjs 0.1.5-rc.3      # 列出缺失的 20 个
 }
 ```
 
+`detail` 那一行不是可选装饰：它同时显示在面板和 `actions_list` 的返回里，**Agent 靠它判断这是不是它要找的任务**。
+
 打开右侧栏「开始」页的 **Actions** 卡片，点 `check` 旁的运行——输出在下方的 run tab 工作区实时流出。这就是完整闭环：写配置 → 面板点击 → 看输出。保存配置文件即自动生效，无需刷新。
+
+## 一份配置，两个面
+
+同一个 `actions.json`，对人和对 Agent 是两种用法，背后是同一份定义——不是两套东西互相同步：
+
+|  | 怎么发现 | 怎么用 |
+| --- | --- | --- |
+| **人** | 右侧栏 Actions 面板 | 一次点击；带参数的弹出表单；输出流式可见 |
+| **Agent** | `actions_list` | 调用 `actions_run`，结构化返回结果 |
+
+Agent 侧一共 6 个工具：`actions_list` / `actions_run` / `actions_inspect` / `actions_cancel` / `actions_set_params` / `actions_register`，语义与取舍见 [Agent 集成](docs/features/agent-integration.md)。其中 `actions_register` 把会话中发现的流程注册成会话层任务，**必经你批准**——Agent 给自己造可执行命令属高危操作。
+
+插件还随包带了一个 `dsh-actions-authoring` skill：你让 Agent 写 `actions.json` 时，它自己就会拿到全字段参考和策展指导，不用你翻文档。
 
 ## 使用场景
 
 三个典型场景各有详述文档：
 
-- **[策展散落的脚本入口](docs/scenarios/01-bridge-scripts.md)**：npm scripts / Makefile / Taskfile / `scripts/` 目录太分散？让 Agent 一次性策展固化成 `.dsh/actions.json`，面板与 Agent 共用统一入口，原始入口一个都不动；
+- **[策展散落的脚本入口](docs/scenarios/01-curate-scripts.md)**：npm scripts / Makefile / Taskfile / `scripts/` 目录太分散？让 Agent 一次性策展固化成 `.dsh/actions.json`，面板与 Agent 共用统一入口，原始入口一个都不动；
 - **[打通 CI/发布流水线](docs/scenarios/02-ci-pipeline.md)**：以 Jenkins 为例，把平台 API 固化成 Actions——触发构建、查询状态、参数化发布（`inputs` + `approval` 的真实用法）；
 - **[会话草稿本](docs/scenarios/03-session-scratchpad.md)**：只在当前会话有意义、但需要反复执行的临时任务，Agent 注册、随用随弃、用得好再提升到文件层。
 
@@ -144,6 +161,8 @@ node scripts/verify-floor.mjs 0.1.5-rc.3      # 列出缺失的 20 个
 - 作为 DSH Web 中的可视化界面，供人查看和操作。
 
 Skills 和 MCP 已经为面向 Agent 的能力提供了很好的实现范式。Agent 不需要一开始就在上下文中获得所有实现细节：系统可以先提供有限、精炼的能力描述，只在真正需要时渐进式披露参数、约束、执行细节和结果。DSH Actions 希望把这种渐进式披露方式用于项目中的可重复操作，同时避免让 Agent 成为这些脚本生命周期的唯一所有者，也不把人排除在同一套工具之外。
+
+由此留下的一个开放问题，也是这个项目到现在没想明白的：**脚本的生命周期，应该由人拥有、由 Agent 拥有，还是共享？** 放进 Agent Skill，演进快，但人失去统一入口和治理能力；放进项目配置，可审查可共享，但每次改动都要走一遍 git。DSH Actions 押的是第三条路——代价是**人和 Agent 都得学会在同一份文件上协作**。这条路对不对，得等真实用法来验证。
 
 ## 三层设计
 
@@ -172,7 +191,7 @@ Skills 和 MCP 已经为面向 Agent 的能力提供了很好的实现范式。A
 
 **场景**（什么时候用、怎么用）：
 
-- [策展散落的脚本入口](docs/scenarios/01-bridge-scripts.md)
+- [策展散落的脚本入口](docs/scenarios/01-curate-scripts.md)
 - [打通 CI/发布流水线（Jenkins 示例）](docs/scenarios/02-ci-pipeline.md)
 - [会话草稿本（会话级临时任务）](docs/scenarios/03-session-scratchpad.md)
 

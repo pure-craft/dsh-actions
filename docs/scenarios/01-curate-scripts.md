@@ -1,4 +1,4 @@
-# 场景：桥接现有脚本入口
+# 场景：策展散落的脚本入口
 
 > 返回 [README](../../README.md) ｜ 相关：[配置参考](../features/configuration.md) ｜ 场景：[CI 流水线](02-ci-pipeline.md) ｜ [会话草稿本](03-session-scratchpad.md)
 

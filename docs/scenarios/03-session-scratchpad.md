@@ -1,6 +1,6 @@
 # 场景：会话草稿本（会话级临时任务）
 
-> 返回 [README](../../README.md) ｜ 相关：[会话层](../features/session-layer.md) ｜ 场景：[桥接脚本入口](01-bridge-scripts.md) ｜ [CI 流水线](02-ci-pipeline.md)
+> 返回 [README](../../README.md) ｜ 相关：[会话层](../features/session-layer.md) ｜ 场景：[策展散落的脚本入口](01-curate-scripts.md) ｜ [CI 流水线](02-ci-pipeline.md)
 
 ## 痛点
 
