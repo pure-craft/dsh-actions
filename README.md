@@ -1,5 +1,7 @@
 # DSH Actions
 
+**简体中文** ｜ [English](https://github.com/pure-craft/dsh-actions/blob/main/README.en.md)
+
 [![npm version](https://img.shields.io/npm/v/dsh-actions.svg)](https://www.npmjs.com/package/dsh-actions)
 [![license](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/pure-craft/dsh-actions/blob/main/LICENSE)
 
