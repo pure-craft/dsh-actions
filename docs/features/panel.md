@@ -1,6 +1,8 @@
 # 功能：Actions 面板
 
-> 返回 [README](../../README.md) ｜ 相关：[配置参考](configuration.md) ｜ [Agent 集成](agent-integration.md) ｜ [会话层](session-layer.md)
+**简体中文** ｜ [English](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/panel.en.md)
+
+> 返回 [README](https://github.com/pure-craft/dsh-actions/blob/main/README.md) ｜ 相关：[配置参考](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/configuration.md) ｜ [Agent 集成](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/agent-integration.md) ｜ [会话层](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/session-layer.md)
 
 面板是给人用的主入口：DSH Web 右侧栏「开始」页的 **Actions** 卡片（绑定当前会话的工作区；composer 统计条上还有一枚实时状态胶囊可直达）。设计目标只有一个——让运行一个项目任务变成一次点击。
 
@@ -18,7 +20,7 @@
 
 - 每次运行是一个 tab（跨任务排布在一条 tab 条上，溢出横向滚动、边缘渐隐）；点击列表中的任务只聚焦其最新 tab，不替换整个区域；工作区可整体收起/展开、高度固定；没有任何运行时工作区不渲染。
 - 各 tab 的输出与取消相互独立，绝不混流；活动中的 tab 可停止，已终结的可遗忘（关闭活动中的 tab 先经「终止并关闭」确认）。
-- 焦点规则按呈现档区分：`new` 档不抢焦点（只有正看着最新运行时才跟随新运行），`dedicated`/`append` 档原地刷新所在 tab。三档语义见[配置参考](configuration.md)。
+- 焦点规则按呈现档区分：`new` 档不抢焦点（只有正看着最新运行时才跟随新运行），`dedicated`/`append` 档原地刷新所在 tab。三档语义见[配置参考](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/configuration.md)。
 
 ## 运行与冲突
 
@@ -28,7 +30,7 @@
 
 ## 参数表单
 
-声明了 `inputs` 的任务在运行时渲染表单：按 上次运行参数 > 会话固定值 > `default` 三级预填，`select` 用下拉选择；「固定到本会话」勾选后运行无需逐次填写（固定值随会话销毁，不写进配置文件）。字段语义见[配置参考](configuration.md)，Agent 侧对应物见[会话层](session-layer.md)。
+声明了 `inputs` 的任务在运行时渲染表单：按 上次运行参数 > 会话固定值 > `default` 三级预填，`select` 用下拉选择；「固定到本会话」勾选后运行无需逐次填写（固定值随会话销毁，不写进配置文件）。字段语义见[配置参考](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/configuration.md)，Agent 侧对应物见[会话层](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/session-layer.md)。
 
 ## 实时同步
 

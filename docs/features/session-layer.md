@@ -1,6 +1,8 @@
 # 功能：会话层
 
-> 返回 [README](../../README.md) ｜ 相关：[配置参考](configuration.md) ｜ [Agent 集成](agent-integration.md) ｜ 场景：[会话草稿本](../scenarios/03-session-scratchpad.md)
+**简体中文** ｜ [English](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/session-layer.en.md)
+
+> 返回 [README](https://github.com/pure-craft/dsh-actions/blob/main/README.md) ｜ 相关：[配置参考](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/configuration.md) ｜ [Agent 集成](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/agent-integration.md) ｜ 场景：[会话草稿本](https://github.com/pure-craft/dsh-actions/blob/main/docs/scenarios/03-session-scratchpad.md)
 
 三层模型的最上层：会话层。它回答"这个任务只在当前会话里有意义"的场景——一次性命令、把某个任务的参数钉死一档、Agent 在会话中刚发现的工作流。
 
@@ -17,7 +19,7 @@ Agent 经 `actions_register` 把新任务写进会话层，**注册必经用户�
 - 独立命令：完整的一条新任务定义；
 - 变体：`extends: "<layer>:<label>"` 继承现有任务的定义（cwd/env/inputs/runOptions 等），配合 `params` 把参数钉死一档——例如把 `workspace:deploy` 派生成"部署到 staging"的会话专用变体。
 
-`extends` 按各层原始条目解析（被高层覆盖的条目仍可显式引用），链式继承与声明顺序无关；引用解析不到时运行报 `unknown-extends`。细节见[配置参考](configuration.md)。
+`extends` 按各层原始条目解析（被高层覆盖的条目仍可显式引用），链式继承与声明顺序无关；引用解析不到时运行报 `unknown-extends`。细节见[配置参考](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/configuration.md)。
 
 ## 生命周期与提升
 

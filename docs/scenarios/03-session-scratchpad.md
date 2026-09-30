@@ -1,6 +1,8 @@
 # 场景：会话草稿本（会话级临时任务）
 
-> 返回 [README](../../README.md) ｜ 相关：[会话层](../features/session-layer.md) ｜ 场景：[策展散落的脚本入口](01-curate-scripts.md) ｜ [CI 流水线](02-ci-pipeline.md)
+**简体中文** ｜ [English](https://github.com/pure-craft/dsh-actions/blob/main/docs/scenarios/03-session-scratchpad.en.md)
+
+> 返回 [README](https://github.com/pure-craft/dsh-actions/blob/main/README.md) ｜ 相关：[会话层](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/session-layer.md) ｜ 场景：[策展散落的脚本入口](https://github.com/pure-craft/dsh-actions/blob/main/docs/scenarios/01-curate-scripts.md) ｜ [CI 流水线](https://github.com/pure-craft/dsh-actions/blob/main/docs/scenarios/02-ci-pipeline.md)
 
 ## 痛点
 

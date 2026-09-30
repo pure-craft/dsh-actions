@@ -1,6 +1,8 @@
 # 场景：策展散落的脚本入口
 
-> 返回 [README](../../README.md) ｜ 相关：[配置参考](../features/configuration.md) ｜ 场景：[CI 流水线](02-ci-pipeline.md) ｜ [会话草稿本](03-session-scratchpad.md)
+**简体中文** ｜ [English](https://github.com/pure-craft/dsh-actions/blob/main/docs/scenarios/01-curate-scripts.en.md)
+
+> 返回 [README](https://github.com/pure-craft/dsh-actions/blob/main/README.md) ｜ 相关：[配置参考](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/configuration.md) ｜ 场景：[CI 流水线](https://github.com/pure-craft/dsh-actions/blob/main/docs/scenarios/02-ci-pipeline.md) ｜ [会话草稿本](https://github.com/pure-craft/dsh-actions/blob/main/docs/scenarios/03-session-scratchpad.md)
 
 ## 痛点
 

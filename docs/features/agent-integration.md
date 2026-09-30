@@ -1,6 +1,8 @@
 # 功能：Agent 集成
 
-> 返回 [README](../../README.md) ｜ 相关：[配置参考](configuration.md) ｜ [会话层](session-layer.md) ｜ [面板](panel.md)
+**简体中文** ｜ [English](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/agent-integration.en.md)
+
+> 返回 [README](https://github.com/pure-craft/dsh-actions/blob/main/README.md) ｜ 相关：[配置参考](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/configuration.md) ｜ [会话层](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/session-layer.md) ｜ [面板](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/panel.md)
 
 同一个 Action 以两种形态提供：面板上的一次点击（人），以及一组结构化工具（Agent）。两侧的语义完全一致——同一份目录、同一个冲突协议、同一条审批闸门。
 

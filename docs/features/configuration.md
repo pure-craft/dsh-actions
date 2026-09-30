@@ -1,6 +1,8 @@
 # 配置参考：actions.json 全字段
 
-> 返回 [README](../../README.md) ｜ 相关：场景文档（[策展散落的脚本入口](../scenarios/01-curate-scripts.md) / [CI 流水线](../scenarios/02-ci-pipeline.md) / [会话草稿本](../scenarios/03-session-scratchpad.md)）｜ [面板](panel.md) ｜ [会话层](session-layer.md)
+**简体中文** ｜ [English](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/configuration.en.md)
+
+> 返回 [README](https://github.com/pure-craft/dsh-actions/blob/main/README.md) ｜ 相关：场景文档（[策展散落的脚本入口](https://github.com/pure-craft/dsh-actions/blob/main/docs/scenarios/01-curate-scripts.md) / [CI 流水线](https://github.com/pure-craft/dsh-actions/blob/main/docs/scenarios/02-ci-pipeline.md) / [会话草稿本](https://github.com/pure-craft/dsh-actions/blob/main/docs/scenarios/03-session-scratchpad.md)）｜ [面板](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/panel.md) ｜ [会话层](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/session-layer.md)
 
 Action 定义的唯一来源是独立的 `actions.json`（**JSONC**：允许注释与尾逗号），分三层读取，合并优先级递增：
 
@@ -8,7 +10,7 @@ Action 定义的唯一来源是独立的 `actions.json`（**JSONC**：允许注�
 | --- | --- | --- |
 | 全局 | `~/.dsh/actions.json`（`DSH_HOME` 可覆盖根目录） | 个人常用、跨工作区 |
 | 工作区 | `<workspace>/.dsh/actions.json` | 项目共享，随仓库提交（默认选择） |
-| 会话 | `<dshHome>/sessions/<projectKey>/<sessionId>/actions.json` | 仅当前会话可见，由 `actions_register` 写入（见[会话层](session-layer.md)） |
+| 会话 | `<dshHome>/sessions/<projectKey>/<sessionId>/actions.json` | 仅当前会话可见，由 `actions_register` 写入（见[会话层](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/session-layer.md)） |
 
 每个文件必须声明 `"version": "1.0.0"`——这是枚举白名单门，不是 semver；其他取值整层降级为 `unsupported-version`。
 
@@ -42,7 +44,7 @@ Action 定义的唯一来源是独立的 `actions.json`（**JSONC**：允许注�
 | `default` | 否 | 未提供值时的兜底；`select` 必须落在 `options` 内 |
 | `options` | `select` 必备 | 允许取值，非空 |
 
-两条关键规则：**替换是原文替换、不加引号不转义**（值可能含空格或 shell 元字符时由作者自行加引号）；**参数参与冲突判定**——同一 Action 不同参数的运行互不冲突。运行时的取值链为 显式传参 > 会话固定值 > 配置 `default`（见[会话层](session-layer.md)与[面板](panel.md)）。
+两条关键规则：**替换是原文替换、不加引号不转义**（值可能含空格或 shell 元字符时由作者自行加引号）；**参数参与冲突判定**——同一 Action 不同参数的运行互不冲突。运行时的取值链为 显式传参 > 会话固定值 > 配置 `default`（见[会话层](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/session-layer.md)与[面板](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/panel.md)）。
 
 ## approval（审批要求）
 
@@ -60,7 +62,7 @@ Action 定义的唯一来源是独立的 `actions.json`（**JSONC**：允许注�
 - `dedicated`：该任务独占一个 tab，重跑原地替换内容（上次输出从视图丢弃，运行记录保留）；
 - `append`：同 dedicated，但新输出接在历史输出下方，中间插入边界行。
 
-面板行为细节见[面板](panel.md)。
+面板行为细节见[面板](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/panel.md)。
 
 ## extends（继承）
 
