@@ -1,7 +1,7 @@
 # DSH Actions
 
 [![npm version](https://img.shields.io/npm/v/dsh-actions.svg)](https://www.npmjs.com/package/dsh-actions)
-[![license](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
+[![license](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/pure-craft/dsh-actions/blob/main/LICENSE)
 
 > 写一份跟随仓库的 `actions.json`，它同时是**你在右侧栏点一下就跑的面板入口**，和 **Agent 可以直接调用的结构化工具**——同一份定义，同一个审批闸门。
 
@@ -133,7 +133,7 @@ node scripts/verify-floor.mjs 0.1.5-rc.3      # 列出缺失的 20 个
 | **人** | 右侧栏 Actions 面板 | 一次点击；带参数的弹出表单；输出流式可见 |
 | **Agent** | `actions_list` | 调用 `actions_run`，结构化返回结果 |
 
-Agent 侧一共 6 个工具：`actions_list` / `actions_run` / `actions_inspect` / `actions_cancel` / `actions_set_params` / `actions_register`，语义与取舍见 [Agent 集成](docs/features/agent-integration.md)。其中 `actions_register` 把会话中发现的流程注册成会话层任务，**必经你批准**——Agent 给自己造可执行命令属高危操作。
+Agent 侧一共 6 个工具：`actions_list` / `actions_run` / `actions_inspect` / `actions_cancel` / `actions_set_params` / `actions_register`，语义与取舍见 [Agent 集成](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/agent-integration.md)。其中 `actions_register` 把会话中发现的流程注册成会话层任务，**必经你批准**——Agent 给自己造可执行命令属高危操作。
 
 插件还随包带了一个 `dsh-actions-authoring` skill：你让 Agent 写 `actions.json` 时，它自己就会拿到全字段参考和策展指导，不用你翻文档。
 
@@ -141,11 +141,11 @@ Agent 侧一共 6 个工具：`actions_list` / `actions_run` / `actions_inspect`
 
 三个典型场景各有详述文档：
 
-- **[策展散落的脚本入口](docs/scenarios/01-curate-scripts.md)**：npm scripts / Makefile / Taskfile / `scripts/` 目录太分散？让 Agent 一次性策展固化成 `.dsh/actions.json`，面板与 Agent 共用统一入口，原始入口一个都不动；
-- **[打通 CI/发布流水线](docs/scenarios/02-ci-pipeline.md)**：以 Jenkins 为例，把平台 API 固化成 Actions——触发构建、查询状态、参数化发布（`inputs` + `approval` 的真实用法）；
-- **[会话草稿本](docs/scenarios/03-session-scratchpad.md)**：只在当前会话有意义、但需要反复执行的临时任务，Agent 注册、随用随弃、用得好再提升到文件层。
+- **[策展散落的脚本入口](https://github.com/pure-craft/dsh-actions/blob/main/docs/scenarios/01-curate-scripts.md)**：npm scripts / Makefile / Taskfile / `scripts/` 目录太分散？让 Agent 一次性策展固化成 `.dsh/actions.json`，面板与 Agent 共用统一入口，原始入口一个都不动；
+- **[打通 CI/发布流水线](https://github.com/pure-craft/dsh-actions/blob/main/docs/scenarios/02-ci-pipeline.md)**：以 Jenkins 为例，把平台 API 固化成 Actions——触发构建、查询状态、参数化发布（`inputs` + `approval` 的真实用法）；
+- **[会话草稿本](https://github.com/pure-craft/dsh-actions/blob/main/docs/scenarios/03-session-scratchpad.md)**：只在当前会话有意义、但需要反复执行的临时任务，Agent 注册、随用随弃、用得好再提升到文件层。
 
-更完整的示例（`runOptions`、`inputs`、`approval`）见[配置参考](docs/features/configuration.md)。
+更完整的示例（`runOptions`、`inputs`、`approval`）见[配置参考](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/configuration.md)。
 
 > 欢迎补充：告诉我们你是怎么用的、你有什么需求——场景库会随真实用法持续生长。
 
@@ -185,22 +185,22 @@ Skills 和 MCP 已经为面向 Agent 的能力提供了很好的实现范式。A
 - **会话层由 Agent 写入**：`actions_register` 注册必经你的批准；你觉得好用的，一句话提升到文件层变成长期资产；
 - **人的同一面板**：三层任务在同一个列表里分区展示，运行方式完全一致——来源只是元信息，不是使用门槛。
 
-字段级细节见 [配置参考](docs/features/configuration.md)，会话层的存储与生命周期见 [会话层](docs/features/session-layer.md)。
+字段级细节见 [配置参考](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/configuration.md)，会话层的存储与生命周期见 [会话层](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/session-layer.md)。
 
 ## 文档地图
 
 **场景**（什么时候用、怎么用）：
 
-- [策展散落的脚本入口](docs/scenarios/01-curate-scripts.md)
-- [打通 CI/发布流水线（Jenkins 示例）](docs/scenarios/02-ci-pipeline.md)
-- [会话草稿本（会话级临时任务）](docs/scenarios/03-session-scratchpad.md)
+- [策展散落的脚本入口](https://github.com/pure-craft/dsh-actions/blob/main/docs/scenarios/01-curate-scripts.md)
+- [打通 CI/发布流水线（Jenkins 示例）](https://github.com/pure-craft/dsh-actions/blob/main/docs/scenarios/02-ci-pipeline.md)
+- [会话草稿本（会话级临时任务）](https://github.com/pure-craft/dsh-actions/blob/main/docs/scenarios/03-session-scratchpad.md)
 
 **功能**（分主题的细节参考）：
 
-- [配置参考：actions.json 全字段](docs/features/configuration.md)
-- [Actions 面板](docs/features/panel.md)
-- [Agent 集成](docs/features/agent-integration.md)
-- [会话层](docs/features/session-layer.md)
+- [配置参考：actions.json 全字段](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/configuration.md)
+- [Actions 面板](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/panel.md)
+- [Agent 集成](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/agent-integration.md)
+- [会话层](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/session-layer.md)
 
 > 注：`AGENTS.md` 是本地贡献指南，不随 git 仓库分发（随 npm 包附带）；路线图、待办与设计调研为团队私有文档，不在公开仓库中。
 
@@ -215,7 +215,7 @@ Skills 和 MCP 已经为面向 Agent 的能力提供了很好的实现范式。A
 
 `actions.json` 的字段设计、逐条容错与实例复用语义，参考了 [VS Code Tasks](https://code.visualstudio.com/docs/editor/tasks)（tasks.json v2）并精简为子集；Action / Run 这套产品语言——执行状态、日志、运行历史、受控自动化——参考了 [GitHub Actions](https://docs.github.com/en/actions)。
 
-三层合并与会话层是两者都没有的：那一部分是为了让同一份定义**既能被人点击、又能被 Agent 调用**才加的。字段全集与本项目的有意差异见 [配置参考](docs/features/configuration.md)。
+三层合并与会话层是两者都没有的：那一部分是为了让同一份定义**既能被人点击、又能被 Agent 调用**才加的。字段全集与本项目的有意差异见 [配置参考](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/configuration.md)。
 
 ## License
 
