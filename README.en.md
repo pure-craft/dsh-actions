@@ -232,7 +232,7 @@ Every doc is bilingual: Chinese is the `.md`, English is the matching `.en.md` i
 - [Agent integration](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/agent-integration.en.md)
 - [The session layer](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/session-layer.en.md)
 
-> Note: `AGENTS.md` is a local contributor guide, not distributed with the git repo (it ships with the npm package); the roadmap, backlog, and design research are team-private documents and not in the public repo.
+> Note: `AGENTS.md` is a local contributor guide and is not distributed at all (neither in the git repo nor in the npm package); the roadmap, backlog, and design research are team-private documents and likewise not in the public repo.
 
 ## Package identity
 

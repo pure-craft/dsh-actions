@@ -228,7 +228,7 @@ Skills 和 MCP 已经为面向 Agent 的能力提供了很好的实现范式。A
 - [Agent 集成](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/agent-integration.md)（[English](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/agent-integration.en.md)）
 - [会话层](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/session-layer.md)（[English](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/session-layer.en.md)）
 
-> 注：`AGENTS.md` 是本地贡献指南，不随 git 仓库分发（随 npm 包附带）；路线图、待办与设计调研为团队私有文档，不在公开仓库中。
+> 注：`AGENTS.md` 是本地贡献指南，不对外分发（既不在 git 仓库，也不随 npm 包发布）；路线图、待办与设计调研为团队私有文档，同样不在公开仓库中。
 
 ## 包身份
 

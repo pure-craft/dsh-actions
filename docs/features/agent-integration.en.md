@@ -30,7 +30,7 @@ For a task with `approval: "agent"` or `"always"`, an agent calling `actions_run
 
 ## Authoring guidance shipped with the package
 
-The plugin bundles a `dsh-actions-authoring` skill (versioned with the package, registered by the Host): it gives the full field reference and curation guidance when writing config, and the list→run→inspect→cancel rhythm plus conflict/approval rules when operating tasks. Schema changes update it in lockstep with the plugin (enforced by `AGENTS.md`).
+The plugin bundles a `dsh-actions-authoring` skill (versioned with the package, registered by the Host): it gives the full field reference and curation guidance when writing config, and the list→run→inspect→cancel rhythm plus conflict/approval rules when operating tasks. Schema changes update it in lockstep with the plugin (enforced by the project's contributor convention).
 
 ## Visibility and isolation
 

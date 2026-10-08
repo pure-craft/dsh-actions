@@ -30,7 +30,7 @@
 
 ## 随包编写指导
 
-插件内置 `dsh-actions-authoring` skill（随包版本化，Host 注册）：写配置时给出全字段参考与策展指导，操作任务时给出 list→run→inspect→cancel 的节奏与冲突/审批处理守则。schema 变更时与插件同版本更新（AGENTS.md 强制）。
+插件内置 `dsh-actions-authoring` skill（随包版本化，Host 注册）：写配置时给出全字段参考与策展指导，操作任务时给出 list→run→inspect→cancel 的节奏与冲突/审批处理守则。schema 变更时与插件同版本更新（由项目贡献约定强制）。
 
 ## 可见性与隔离
 
