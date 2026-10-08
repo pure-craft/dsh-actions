@@ -15,6 +15,7 @@
 #     Environment:       (leave blank; this workflow sets no environment)
 #
 # Releasing is then: bump package.json, commit, tag v<version>, push the tag.
+# The tag push publishes to npm and creates the matching GitHub Release.
 #
 # Requirements that are easy to get wrong:
 # - npm >= 11.5.1 is mandatory. npm 10.x generates the provenance statement
@@ -39,7 +40,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write # create the GitHub Release for the tag
   id-token: write # OIDC trusted publishing to npmjs.org
 
 jobs:
@@ -104,3 +105,21 @@ jobs:
         # workflow's id-token claims, and --provenance attaches a signed
         # attestation linking the tarball to this run and commit SHA.
         run: npm publish --provenance
+
+      - name: Create GitHub Release
+        # Runs only for a tag push: a manual dispatch has no release tag to
+        # name the release after. Idempotent, so a re-run is safe. The Release
+        # is created after the npm publish so a failed publish never
+        # announces a version that does not exist.
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME already exists — leaving it untouched."
+            exit 0
+          fi
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes
