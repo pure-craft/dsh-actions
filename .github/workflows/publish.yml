@@ -1,0 +1,106 @@
+# Publish to npmjs.org via OIDC trusted publishing.
+#
+# Why this workflow exists: publishing from a developer machine requires an
+# interactive npm login, a long-lived token in ~/.npmrc, and (with 2FA on)
+# a one-time password per release. OIDC trusted publishing replaces all of
+# that with a short-lived token npmjs.org mints from this workflow's
+# id-token claims. There is no secret to create, store or rotate.
+#
+# One-time operator setup (see docs/private/design-research.md):
+#   npmjs.com -> package "dsh-actions" -> Settings -> Trusted publishers
+#     Provider:          GitHub Actions
+#     Organization:      pure-craft
+#     Repository:        dsh-actions
+#     Workflow filename: publish.yml   <-- basename only, NOT a path
+#     Environment:       (leave blank; this workflow sets no environment)
+#
+# Releasing is then: bump package.json, commit, tag v<version>, push the tag.
+#
+# Requirements that are easy to get wrong:
+# - npm >= 11.5.1 is mandatory. npm 10.x generates the provenance statement
+#   but does NOT attach OIDC auth headers to the publish request, so the
+#   registry answers 404 PUT even though the trusted publisher is configured
+#   correctly. Node 24 ships a new enough npm; Node 22 ships npm 10.9.x and
+#   fails. The version guard below fails fast instead of publishing blind.
+# - `permissions: id-token: write` is what makes the OIDC handshake possible.
+# - The workflow filename in the npmjs.com config must match this file's
+#   basename exactly; a mismatch is also a 404 PUT.
+
+name: Publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write # OIDC trusted publishing to npmjs.org
+
+jobs:
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.x'
+          registry-url: 'https://registry.npmjs.org'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Guard npm version (trusted publishing needs >= 11.5.1)
+        run: |
+          set -euo pipefail
+          NPM_VERSION=$(npm --version)
+          echo "npm $NPM_VERSION on node $(node --version)"
+          node -e '
+            const [maj, min] = process.argv[1].split(".").map(Number);
+            if (maj < 11 || (maj === 11 && min < 5)) {
+              console.error("npm " + process.argv[1] + " cannot do trusted publishing (needs >= 11.5.1).");
+              process.exit(1);
+            }
+          ' "$NPM_VERSION"
+
+      - name: Guard tag matches package.json version
+        run: |
+          set -euo pipefail
+          VERSION=$(node -p "require('./package.json').version")
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            TAG="${GITHUB_REF_NAME#v}"
+            if [ "$TAG" != "$VERSION" ]; then
+              echo "Tag v$TAG does not match package.json version $VERSION" >&2
+              exit 1
+            fi
+          fi
+          echo "Publishing version $VERSION"
+
+      # `npm publish` also runs prepublishOnly (pnpm check && pnpm build), so
+      # the tarball is always built from a passing tree. These two steps exist
+      # to surface the failure as itself rather than inside the publish log.
+      - name: Check
+        run: pnpm check
+
+      - name: Build
+        run: pnpm build
+
+      - name: Publish
+        # No NODE_AUTH_TOKEN: npm negotiates OIDC with npmjs.org using this
+        # workflow's id-token claims, and --provenance attaches a signed
+        # attestation linking the tarball to this run and commit SHA.
+        run: npm publish --provenance
