@@ -159,8 +159,8 @@ Agent 侧一共 6 个工具：`actions_list` / `actions_run` / `actions_inspect`
 | 层 | 位置 | 谁能看到 | 生命周期 | 典型用途 |
 |---|---|---|---|---|
 | **全局** | `~/.dsh/actions.json` | 你的所有工作区 | 跟随文件 | 个人习惯命令（查版本、查磁盘、开常用工具） |
-| **工作区** | `<repo>/.dsh/actions.json` | 该项目的所有人与 Agent | 随仓库提交 | 项目的 build/test/部署——新同事 clone 即有全套 |
-| **会话** | 会话自己的目录 | 仅当前会话 | 会话结束即归档 | Agent 工作中沉淀的临时任务、一次性的环境变体 |
+| **工作区** | `<workspace>/.dsh/actions.json` | 该工作区的所有人与 Agent | 随目录/仓库提交 | 项目的 build/test/部署——新同事 clone 即有全套 |
+| **会话** | 会话自己的目录 | 仅当前会话 | 会话结束即归档 | 临时任务；以及聚合目录下本会话实际涉及的仓库 |
 
 三层不是并列的三个配置，而是一条**任务的成长路径**：
 
@@ -172,6 +172,20 @@ Agent 侧一共 6 个工具：`actions_list` / `actions_run` / `actions_inspect`
 - **合并而非隔离**：工作区可以在全局的同名任务上只改一个字段（比如覆盖 `command` 加参数、或补一个 `detail`），其余字段继承；
 - **会话层由 Agent 写入**：`actions_register` 注册必经你的批准；你觉得好用的，一句话提升到文件层变成长期资产；
 - **人的同一面板**：三层任务在同一个列表里分区展示，运行方式完全一致——来源只是元信息，不是使用门槛。
+
+### 一个工作区包含多个仓库
+
+如果会话工作区是若干 Git 仓库的上层目录，不必把所有仓库的任务复制到根配置。每个仓库继续维护自己的 `.dsh/actions.json`，当前会话只在自己的配置里记录本次涉及的目录：
+
+```jsonc
+{
+  "version": "1.0.0",
+  "folders": ["frontend", "services/api"],
+  "actions": []
+}
+```
+
+`folders` **仅在会话层有效**，含义只有一个：额外加载这些目录各自的 `.dsh/actions.json`。它是会话的动态目录选择，不参与三层继承、并集或覆盖；根工作区和全局 Actions 仍照常加载。不同会话可以选择不同目录，也不会改写上层目录或仓库中的共享配置。
 
 字段级细节见 [配置参考](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/configuration.md)，会话层的存储与生命周期见 [会话层](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/session-layer.md)。
 

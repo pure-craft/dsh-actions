@@ -12,6 +12,28 @@ The top layer of the three-layer model: the session layer. It answers the "this 
 - Visible to that session only: merge priority is global < workspace < session, and the session layer wins every merge it takes part in.
 - **An empty layer is a normal state**: before the first registration the file does not exist (`available: true` + `exists: false`); the panel hides the "open config" button based on the `exists` signal, and the file appears once the first task is registered.
 
+## Dynamic Action directories: `folders`
+
+When the workspace is merely an aggregate parent of several Git repositories, each repository still keeps its definitions in its own `<folder>/.dsh/actions.json`. The session layer can select only the directories involved in the current work:
+
+```jsonc
+{
+  "version": "1.0.0",
+  "folders": ["frontend", "services/api"],
+  "actions": []
+}
+```
+
+The rules are deliberately small:
+
+- `folders` is valid only in the session layer; the same field in a global or workspace file is invalid;
+- each value is a directory relative to the current session workspace, and loads `<workspace>/<folder>/.dsh/actions.json`;
+- it is the complete session selection and does not inherit, union, or override a `folders` value from another layer;
+- an omitted field and an empty array both mean no extra directories; global, root-workspace, and session-local `actions` still load normally;
+- selected repository definitions are neither copied nor rewritten; another session may select a completely different set.
+
+`folders` is therefore dynamic session context, not team-shared configuration. Each directory's configuration continues to travel with its repository and remains the single source of truth.
+
 ## Write path: `actions_register`
 
 The agent writes new tasks into the session layer through `actions_register`, and **registration always requires user approval** (an agent authoring an executable command for itself is high-risk by definition). Two granularities are supported:

@@ -97,6 +97,12 @@ export const ACTIONS_CSS = `
 .dsh-actions-conflict-buttons { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .dsh-actions-declined { border-color: var(--dsw-alias-border-l2); }
 
+/* Run approval: RiskConfirmation has a compact shared default. Action commands
+   can be long, so widen this instance and wrap content instead of introducing
+   a horizontal scrollbar. The body marker scopes the portalled modal override. */
+body.dsh-actions-run-confirmation-open [role='dialog'] { width: min(760px, calc(100vw - 48px)); max-width: 760px; }
+body.dsh-actions-run-confirmation-open [role='dialog'] p { white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
+
 /* Parameter form (T34, Modal-based): fields stack inside the dialog body; the
    pin row sits left of the footer actions. */
 .dsh-actions-param-field { display: flex; flex-direction: column; gap: 4px; }

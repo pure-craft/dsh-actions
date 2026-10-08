@@ -504,6 +504,10 @@ function ConfirmationBar(props: {
 }): React.ReactElement {
   const { action, store, t } = props;
   const [acknowledged, setAcknowledged] = React.useState(false);
+  React.useEffect(() => {
+    document.body.classList.add('dsh-actions-run-confirmation-open');
+    return () => { document.body.classList.remove('dsh-actions-run-confirmation-open'); };
+  }, []);
   return h(RiskConfirmation, {
     open: true,
     title: t('confirmTitle'),

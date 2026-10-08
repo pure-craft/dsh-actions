@@ -161,8 +161,8 @@ Where an action sits determines **who can see it and how long it lives** — the
 | Layer | Location | Who sees it | Lifetime | Typical use |
 |---|---|---|---|---|
 | **Global** | `~/.dsh/actions.json` | all your workspaces | follows the file | personal habitual commands (check a version, check disk, open a common tool) |
-| **Workspace** | `<repo>/.dsh/actions.json` | everyone on the project, and agents | committed with the repo | the project's build/test/deploy — a new colleague clones and has them all |
-| **Session** | the session's own directory | this session only | archived when the session ends | tasks an agent pinned down mid-work, one-off environment variants |
+| **Workspace** | `<workspace>/.dsh/actions.json` | everyone in the workspace, and agents | follows the directory/repository | the project's build/test/deploy — a new colleague clones and has them all |
+| **Session** | the session's own directory | this session only | archived when the session ends | temporary tasks, plus the repositories this session actually uses under an aggregate directory |
 
 The three layers are not three parallel configs — they are a **growth path for a task**:
 
@@ -174,6 +174,20 @@ session layer (agent pins it down)  ──promote──▶  workspace layer (tea
 - **Merge, not isolation**: a workspace can change a single field of a global task of the same name (override `command` to add an argument, or add a `detail`) and inherit the rest.
 - **The session layer is written by the agent**: `actions_register` always requires your approval; the ones you like, you promote to a file layer and they become long-term assets.
 - **One panel for people**: all three layers appear in the same list, grouped; they run identically — the layer is metadata, not a barrier.
+
+### One workspace containing multiple repositories
+
+If a session workspace is the parent directory of several Git repositories, do not copy every repository's tasks into the root config. Each repository keeps its own `.dsh/actions.json`; the current session records only the directories involved in this work:
+
+```jsonc
+{
+  "version": "1.0.0",
+  "folders": ["frontend", "services/api"],
+  "actions": []
+}
+```
+
+`folders` is **valid only in the session layer** and has one meaning: additionally load each listed directory's own `.dsh/actions.json`. It is dynamic session selection, not a field that participates in three-layer inheritance, union, or override. Root-workspace and global Actions continue to load normally. Different sessions can select different directories without rewriting either the aggregate directory's config or any repository's shared config.
 
 Field-level detail is in the [configuration reference](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/configuration.en.md); storage and lifecycle of the session layer are in [the session layer](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/session-layer.en.md).
 

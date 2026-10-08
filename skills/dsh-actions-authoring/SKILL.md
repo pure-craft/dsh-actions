@@ -11,7 +11,7 @@ Work with DSH Actions falls into two domains. Read the routing section, load the
 
 ## Core constraints (both domains)
 
-- **Single definition source.** Actions are defined only in `~/.dsh/actions.json` (personal, global), `<workspace>/.dsh/actions.json` (shared, committed with the repo), and the session layer (written by `actions_register`, visible only to that session). There are no package.json/Taskfile/Makefile importers — never generate or "convert" those.
+- **Single definition source.** Actions are defined only in `~/.dsh/actions.json` (personal, global), `<workspace>/.dsh/actions.json` (shared, committed with the repo), and the session layer (written by `actions_register`, visible only to that session). A session may additionally select repository-local definition files with its top-level `folders`; those files remain the definitions and are never copied. There are no package.json/Taskfile/Makefile importers — never generate or "convert" those.
 - **Version gate.** Every file must declare `"version": "1.0.0"`. It is an enum whitelist, not semver: any other value degrades the entire file with an `unsupported-version` error.
 - **Session-scoped run state.** You only see your own session's runs. Another session on the same workspace may run the same action concurrently — that is normal, not a conflict. The human working in *your* session sees the runs you start appear in their Actions tab in realtime (and can cancel them).
 - **Conflict protocol baseline.** The Host never interrupts an active instance implicitly. A duplicate run request returns a structured `already-running` (reuse) or `rejected` (exclusive) outcome — never a silently killed process. Stopping a run is always an explicit `actions_cancel` call; "stop and rerun" is two explicit calls, never one.
@@ -21,7 +21,7 @@ Work with DSH Actions falls into two domains. Read the routing section, load the
 
 Pick the domain your current task belongs to and read only that file:
 
-- **Writing or editing action definitions** (creating `actions.json`, adding/changing entries, choosing fields, deciding the layer, `extends` inheritance) → read [references/authoring.md](references/authoring.md): the full schema reference, merge semantics, variable substitution, and the unsupported-fields list.
+- **Writing or editing action definitions** (creating `actions.json`, adding/changing entries, choosing fields, deciding the layer, selecting repository-local Action directories with session `folders`, `extends` inheritance) → read [references/authoring.md](references/authoring.md): the full schema reference, folder-selection semantics, merge semantics, variable substitution, and the unsupported-fields list.
 - **Running or managing actions** (starting a task, following output, judging readiness, pinning params, registering session actions, handling conflicts, stopping or restarting runs) → read [references/operating.md](references/operating.md): the list → run → inspect → cancel rhythm, session-layer registration, long-running service management, and runId addressing.
 
 The tool descriptions are the authoritative parameter reference. These files deliberately do not repeat them — they add the judgment the descriptions don't carry.

@@ -6,6 +6,7 @@ Read this when your task is writing or editing action definitions. For running a
 
 - [Where definitions live](#where-definitions-live)
 - [Minimal example](#minimal-example)
+- [Selecting repository-local Actions (`folders`)](#selecting-repository-local-actions-folders)
 - [Field reference](#field-reference)
 - [Variable substitution](#variable-substitution-minimal-set)
 - [Parameters (`inputs`)](#parameters-inputs)
@@ -27,6 +28,8 @@ Three layers (merge priority ascending), all **JSONC** (comments and trailing co
 - Session layer: `<dshHome>/sessions/<projectKey>/<sessionId>/actions.json` — lives in the session's own directory, visible only to that session, and written by `actions_register` (see [operating.md](operating.md)); you rarely edit it by hand. Its file may legitimately not exist yet — an empty session layer is normal, not an error.
 
 Every file must declare `"version": "1.0.0"` — an enum whitelist gate, not semver: any other value degrades the whole file with an `unsupported-version` source error.
+
+Only the session layer may also declare top-level `folders`. It selects extra repository-local definition files for that session; it is not an Action field and does not take part in layer merging.
 
 ## Minimal example
 
@@ -57,6 +60,26 @@ Every file must declare `"version": "1.0.0"` — an enum whitelist gate, not sem
   ]
 }
 ```
+
+## Selecting repository-local Actions (`folders`)
+
+Use this only when the session workspace is an aggregate directory above several repositories. Keep each repository's reusable Actions in its own `<folder>/.dsh/actions.json`, then put the directories needed for the current work in the **session-layer** file:
+
+```jsonc
+{
+  "version": "1.0.0",
+  "folders": ["frontend", "services/api"],
+  "actions": []
+}
+```
+
+Rules:
+
+- `folders` is accepted only at the session layer. Never add it to global or workspace config.
+- Each entry is a directory relative to the session workspace and loads `<workspace>/<folder>/.dsh/actions.json`.
+- The array is the complete set of extra directories for this session. It is not merged, unioned, or inherited across layers.
+- Omitted `folders` and `folders: []` both mean no extra directories. Global Actions, the root workspace's Actions, and the session's own `actions` remain available.
+- Do not copy selected definitions into the session file and do not rewrite repository configs. Edit `folders` when the session's repository set changes.
 
 ## Field reference
 

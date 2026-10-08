@@ -66,6 +66,12 @@
       "prompt": "帮我把这个临时的日志采集命令注册成会话任务：…（命令里故意用了未声明的 ${input:level} 引用）。",
       "expected_output": "On the structured invalid-entry result (registered: false with issues like a missing inputs declaration for the referenced ${input:level}), corrects the entry — declares the input or removes the reference — and resends, rather than retrying unchanged or giving up; keeps the entry session-scoped.",
       "files": []
+    },
+    {
+      "id": 12,
+      "prompt": "当前 workspace 是多个 Git 仓库的上层目录。这次会话只会改 frontend 和 services/api；两个仓库都已经有自己的 .dsh/actions.json。帮我让当前会话能使用它们的 Actions，不要复制任务，也不要修改根目录或仓库配置。",
+      "expected_output": "Updates only the session-layer actions.json with top-level folders [\"frontend\", \"services/api\"] (preserving its existing actions and version), treating folders as the complete session selection; does not add folders to global/workspace config, does not union it with another layer, and does not copy either repository's action definitions into the session file.",
+      "files": []
     }
   ]
 }
