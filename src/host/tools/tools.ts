@@ -27,6 +27,7 @@ import { evaluateAction } from '../run/service.js';
 import type { RunInspection, RunService, SandboxExecutionPolicyLike } from '../run/service.js';
 import type { SessionParamStore } from '../run/session-params.js';
 import { normalizeParams } from '../config/params.js';
+import { isInsideOrEqual } from '../config/paths.js';
 
 // ---------------------------------------------------------------------------
 // Structural mirrors of the DSH host `tools` service surface we consume
@@ -573,6 +574,7 @@ function createRunTool(deps: ActionToolsDeps): ToolDefinitionLike {
         sessionId: string;
         owner?: ToolAgentLike;
         sandboxPolicy?: SandboxExecutionPolicyLike;
+        sandboxRoot?: string;
         params?: Record<string, string>;
       } = {
         workspace,
@@ -585,6 +587,11 @@ function createRunTool(deps: ActionToolsDeps): ToolDefinitionLike {
       // resolver is wired, the run falls back to the shell deployment default.
       const sandboxPolicy = deps.sandboxPolicy?.resolve({ session: agent.session });
       if (sandboxPolicy !== undefined) options.sandboxPolicy = sandboxPolicy;
+      // T66: a folder action outside the workspace writes against its own
+      // repository, not the aggregate parent (same rule as the Web entry).
+      if (action.folder !== undefined && !isInsideOrEqual(workspace, action.folder)) {
+        options.sandboxRoot = action.folder;
+      }
       // T38: pass the merged map down; RunService.run's own merge with the
       // pin board is then a no-op (explicit keys win identically).
       options.params = normalized.values;

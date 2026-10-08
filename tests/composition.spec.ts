@@ -58,6 +58,10 @@ function makeFixture(): Fixture {
   const services: Record<string, unknown> = { tools, connection, skills };
   const ctx: HostContext = {
     get: (key) => services[key],
+    provide: (key, value) => {
+      services[key] = value;
+      return value;
+    },
     effect: (factory) => {
       const dispose = factory();
       if (typeof dispose === 'function') disposers.push(dispose);
@@ -87,6 +91,7 @@ describe('bundle composition', () => {
       expect(skills.registered).toEqual(['dsh-actions-authoring']);
     });
 
+    expect(ctx.get('dshActions')).toMatchObject({ setSessionFolders: expect.any(Function) });
     expect([...tools.registered].sort()).toEqual(['actions_cancel', 'actions_inspect', 'actions_list', 'actions_register', 'actions_run', 'actions_set_params']);
     expect([...connection.routes].sort()).toEqual(Object.values(ACTIONS_API_PATHS).sort());
 

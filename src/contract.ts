@@ -20,10 +20,18 @@ export const ACTIONS_FILE_VERSION = '1.0.0';
 export const ACTIONS_PLUGIN_ID = 'dsh-actions';
 
 /**
- * Where an action definition comes from. Priority order: global < workspace
- * < session (T47) — the session layer wins every merge it joins.
+ * Where an action definition comes from.
+ *
+ * Merge priority: global < workspace < session (T47) — the session layer wins
+ * every merge it joins.
+ *
+ * `folder` is the fourth, **non-merging** origin (T66): the definition lives
+ * in a directory the session selected through its own top-level `folders`,
+ * each folder being an independent source. Folder entries never merge with
+ * the three layers or with each other — two repositories may both define
+ * "build" and both stay addressable — so this value orders nothing.
  */
-export type ActionSourceLayer = 'global' | 'workspace' | 'session';
+export type ActionSourceLayer = 'global' | 'workspace' | 'session' | 'folder';
 
 /** Which entries expose the action. */
 export type ActionVisibility = 'all' | 'ui' | 'agent';
@@ -122,6 +130,16 @@ export interface ActionEntryConfig {
 
 export interface ActionsFileConfig {
   version: string;
+  /**
+   * Session-only (T66): directories whose own `.dsh/actions.json` this
+   * session additionally loads. Relative values resolve against the session
+   * workspace. The array is the complete selection — it does not inherit,
+   * union or override anything, an omitted/empty value means no extra
+   * folders, and the three standard layers load exactly as before. A global
+   * or workspace file carrying this field gets a source-level error and the
+   * field is ignored.
+   */
+  folders?: string[];
   actions?: ActionEntryConfig[];
 }
 
@@ -162,6 +180,12 @@ export interface ProjectActionSummary {
    */
   extends?: string;
   /**
+   * Absolute directory that owns this definition (T66); present only for
+   * `folder` actions. The entry's default cwd and `${workspaceFolder}` are
+   * this directory, not the session workspace.
+   */
+  folder?: string;
+  /**
    * Iconify icon code shown in the panel (T65).
    * @ui-only — never surfaces in Agent context (tool outputs/approvals keep
    * their own whitelisted field sets; do not add this there).
@@ -181,6 +205,7 @@ export type AgentActionView = Pick<
   | 'id'
   | 'label'
   | 'sourceLayer'
+  | 'folder'
   | 'visibility'
   | 'approval'
   | 'command'
@@ -201,10 +226,16 @@ export interface ActionSourceStatus {
   /**
    * Whether the layer's file exists on disk (T61). A session layer's file may
    * be absent while the layer itself is healthy (empty, not degraded) — UI
-   * "open config" affordances gate on this, not on `available`.
+   * "open config" affordances gate on this, not on `available`. A selected
+   * folder without an `actions.json` behaves the same way (T66).
    */
   exists?: boolean;
-  /** Per-entry validation messages collected during loading. */
+  /**
+   * Absolute directory this source belongs to (T66); present only for
+   * `folder` sources, which is what tells several of them apart — they all
+   * share `layer: 'folder'`.
+   */
+  folder?: string;  /** Per-entry validation messages collected during loading. */
   errors: string[];
 }
 

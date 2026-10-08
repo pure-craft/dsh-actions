@@ -51,7 +51,7 @@ import type { UseSessionsLike } from './sessions.js';
 import { ActionIcon } from './action-icon.js';
 import { buildActionBadges } from './badges.js';
 import { buildCtaDraft, ctaPromptKey, mergeCtaDraft, sourceNeedsCta } from './cta.js';
-import { buildActionToken } from './references.js';
+import { buildActionToken, folderSectionTitle } from './references.js';
 
 const h = React.createElement;
 
@@ -281,7 +281,11 @@ interface RowProps {
   onRun: () => void;
   onCancel: (runId: string) => void;
   onSendChat: () => void;
-  onDelete: () => void;
+  /**
+   * T66: absent for actions defined in a session-selected folder — that
+   * repository owns its own file, so the panel never deletes from it.
+   */
+  onDelete?: (() => void) | undefined;
 }
 
 function ActionRow(props: RowProps): React.ReactElement {
@@ -347,11 +351,13 @@ function ActionRow(props: RowProps): React.ReactElement {
         icon: h('span', { className: 'dsh-actions-at-icon', 'aria-hidden': true }, '@'),
         onClick: (event) => { event.stopPropagation(); props.onSendChat(); },
       }),
-      h(IconAction, {
-        label: t('deleteAction'),
-        icon: dangerIcon(h(IconTrashOutlineRegular, { size: 16 })),
-        onClick: (event) => { event.stopPropagation(); props.onDelete(); },
-      }),
+      props.onDelete === undefined
+        ? null
+        : h(IconAction, {
+            label: t('deleteAction'),
+            icon: dangerIcon(h(IconTrashOutlineRegular, { size: 16 })),
+            onClick: (event) => { event.stopPropagation(); props.onDelete!(); },
+          }),
     ),
   );
 }
@@ -373,6 +379,11 @@ function ActionSection(props: {
   onCta?: (() => void) | undefined;
   /** The CTA button's text (per-layer meaning, e.g. 让 Agent 帮我创建一个全局 Action). */
   ctaLabel?: string | undefined;
+  /**
+   * T66: whether rows may be deleted from their config file. Folder sections
+   * pass false — the repository owns that file, the session only points at it.
+   */
+  deletable?: boolean | undefined;
 }): React.ReactElement {
   const { state, store, t } = props;
   const configPath = props.configPath;
@@ -422,7 +433,9 @@ function ActionSection(props: {
           onRun: () => { store.requestRun(action.id); },
           onCancel: (runIdToCancel) => { void store.cancelRun(runIdToCancel); },
           onSendChat: () => { props.onSendChat(action); },
-          onDelete: () => { store.requestDeleteAction(action.id); },
+          onDelete: props.deletable === false
+            ? undefined
+            : () => { store.requestDeleteAction(action.id); },
         });
       }),
     ),
@@ -986,6 +999,26 @@ export function ActionsPanel(deps: PanelDeps): React.ReactElement {
   const workspaceActions = actions.filter((action) => action.sourceLayer === 'workspace');
   const globalActions = actions.filter((action) => action.sourceLayer === 'global');
   const sessionActions = actions.filter((action) => action.sourceLayer === 'session');
+  // T66: folder actions group per selected directory, in the order the
+  // session listed them (the catalog appends folder sources after the three
+  // layers and keeps the file's order inside each one).
+  const folderGroups: Array<{ folder: string; title: string; tip: string | undefined; actions: ProjectActionSummary[] }> = [];
+  const catalogWorkspace = catalog?.workspace ?? '';
+  for (const source of catalog?.sources ?? []) {
+    if (source.layer !== 'folder' || source.folder === undefined) continue;
+    const folder = source.folder;
+    const own = actions.filter((action) => action.sourceLayer === 'folder' && action.folder === folder);
+    folderGroups.push({
+      folder,
+      title: folderSectionTitle(catalogWorkspace, folder),
+      // An empty selection is not hidden: the section head names the
+      // directory, so a mistyped path stays visible instead of silently
+      // contributing nothing. A populated one needs no caption — the title is
+      // the directory itself.
+      tip: own.length > 0 ? undefined : t('folderEmptyTip'),
+      actions: own,
+    });
+  }
   // Banners are for real problems (parse errors). Empty states — missing file
   // OR zero entries — are not banners: they surface as an inline sparkle CTA
   // in the section head, before the edit button.
@@ -1150,6 +1183,23 @@ export function ActionsPanel(deps: PanelDeps): React.ReactElement {
             : undefined,
           ctaLabel: t('ctaCreateSession'),
         }),
+        // T66: one section per session-selected folder, titled after the
+        // directory itself so same-label actions of different repositories
+        // stay legible. No create CTA and no delete: the repository owns its
+        // own file, the session only points at it.
+        ...folderGroups.map((group) => h(ActionSection, {
+          key: group.folder,
+          title: group.title,
+          tip: group.tip,
+          actions: group.actions,
+          state,
+          t,
+          store,
+          configPath: undefined,
+          onOpenConfig: openConfig,
+          onSendChat: sendToChat ?? (() => undefined),
+          deletable: false,
+        })),
       ),
     );
     // Run-tab workspace: one tab per run, clicking an action only focuses

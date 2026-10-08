@@ -66,6 +66,12 @@ export interface ActionsApiDeps {
   /** T47: enroll a session's actions file into the workspace's config poller. */
   watchSession?(workspace: string, sessionId: string): void;
   /**
+   * T66: enroll a selected Action folder's config into the workspace's config
+   * poller. Without it, editing a repository's `.dsh/actions.json` would not
+   * republish the catalog.
+   */
+  watchFolder?(workspace: string, folder: string): void;
+  /**
    * T50: remove one entry (by label) from the layer's actions file and write
    * it back atomically. Returns false when the entry is absent. Wired by the
    * composition to `deleteActionEntryFromFile` + the layer's path.
@@ -376,6 +382,14 @@ async function assembleCatalog(
   // T47: a resolvable caller session also gets its session layer merged in.
   const sessionLive = sessionId !== undefined && deps.resolveSessionWorkspace?.(sessionId) !== undefined;
   const catalog = await deps.loadCatalog(workspace, sessionLive ? sessionId : undefined);
+  // T66: the folders this load actually resolved join the workspace's poll set.
+  // Enrolling here (rather than from the session's raw selection) is what keeps
+  // the poll set honest: only folders that resolved are watched.
+  for (const source of catalog.sources) {
+    if (source.layer === 'folder' && source.folder !== undefined) {
+      deps.watchFolder?.(workspace, source.folder);
+    }
+  }
   // The web entry mirrors the agent tools' audience filter:
   // agent-only actions never leave the Host through this channel.
   // Runs of removed actions stay visible; only agent-only ones are hidden.
@@ -536,6 +550,11 @@ export function createActionsApiRoutes(deps: ActionsApiDeps): ConnectionFetchRou
               `Action "${action.label}" requires explicit confirmation; resend with "confirmed": true`,
             );
           }
+          // T66 × T8-B1: a folder action's cwd already points into its own
+          // repository (the catalog resolved it there). The sandbox *root* is
+          // deliberately not touched on this path — the Web entry passes no
+          // policy at all, so runs keep falling back to the deployment
+          // default; only the agent entry (which stamps a policy) can move it.
           const result = await deps.runs.run(action, { workspace: scope.workspace, sessionId: scope.sessionId, params });
           return json(result);
         } catch (error) {

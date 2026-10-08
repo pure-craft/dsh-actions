@@ -1,5 +1,5 @@
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 
 /** Absolute paths of the two `actions.json` layers. */
 export interface ActionsLayerPaths {
@@ -105,5 +105,27 @@ export function projectKey(cwd: string): string {
 export function sessionActionsPath(dshHome: string, cwd: string | undefined, sessionId: string): string {
   const project = cwd === undefined ? '_no-cwd' : projectKey(cwd);
   return join(dshHome, 'sessions', project, encodeSegment(sessionId), 'actions.json');
+}
+
+/**
+ * T66: the actions file a session-selected folder contributes —
+ * `<folder>/.dsh/actions.json`, the same relative location as the workspace
+ * layer. The repository keeps owning this file; the session only points at it.
+ */
+export function folderActionsPath(folder: string): string {
+  return join(folder, '.dsh', 'actions.json');
+}
+
+/**
+ * T66: whether `child` is `parent` itself or lives under it, compared on
+ * normalized absolute paths. Used to decide whether a selected folder is
+ * already inside the session workspace (whose sandbox root then stays valid).
+ */
+export function isInsideOrEqual(parent: string, child: string): boolean {
+  const base = resolve(parent);
+  const target = resolve(child);
+  if (base === target) return true;
+  const prefix = base.endsWith(sep) ? base : base + sep;
+  return target.startsWith(prefix);
 }
 

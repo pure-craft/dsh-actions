@@ -728,6 +728,43 @@ describe('watcher session files (T47)', () => {
     await tick();
     expect(fired).toBe(1);
   });
+
+  it('an enrolled Action folder fires the listeners when its own config changes (T66)', async () => {
+    const { files, watcher, tick } = makeSessionWatcherFixture();
+    let fired = 0;
+    watcher.watchFolder('/ws', '/ws/frontend');
+    watcher.watchWorkspace('/ws', () => {
+      fired += 1;
+    });
+    await tick(); // absent file establishes a silent baseline
+    expect(fired).toBe(0);
+
+    // The repository creating its .dsh/actions.json is exactly the case that
+    // must refresh the panel: absent -> present is a signature change like any
+    // other.
+    files.set('/ws/frontend/.dsh/actions.json', { mtimeMs: 1, size: 10 });
+    await tick();
+    expect(fired).toBe(1);
+
+    files.set('/ws/frontend/.dsh/actions.json', { mtimeMs: 2, size: 20 });
+    await tick();
+    expect(fired).toBe(2);
+    await tick(); // dedupe
+    expect(fired).toBe(2);
+  });
+
+  it('enrolling a folder before any subscriber still lands in the poll set', async () => {
+    const { files, watcher, tick } = makeSessionWatcherFixture();
+    watcher.watchFolder('/ws', '/ws/frontend');
+    let fired = 0;
+    watcher.watchWorkspace('/ws', () => {
+      fired += 1;
+    });
+    await tick();
+    files.set('/ws/frontend/.dsh/actions.json', { mtimeMs: 1, size: 10 });
+    await tick();
+    expect(fired).toBe(1);
+  });
 });
 
 

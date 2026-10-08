@@ -141,6 +141,18 @@ describe('parseProjectActionSummary', () => {
     expect(() => parseProjectActionSummary({ ...ACTION, icon: null }))
       .toThrow('Invalid project action summary');
   });
+
+  it('carries the folder layer and the owning directory (T66)', () => {
+    const folderAction = {
+      ...ACTION,
+      id: 'folder:frontend:build',
+      sourceLayer: 'folder',
+      folder: '/repo/frontend',
+    };
+    expect(parseProjectActionSummary(folderAction)).toEqual(folderAction);
+    expect(() => parseProjectActionSummary({ ...folderAction, folder: null }))
+      .toThrow('Invalid project action summary');
+  });
 });
 
 describe('parseActionsCatalog', () => {
@@ -176,6 +188,25 @@ describe('parseActionsCatalog', () => {
         sources: [{ layer: 'session', path: '/p', available: true, exists: 'yes', errors: [] }],
         actions: [],
         runs: [],
+      }),
+    ).toThrow('Invalid action source status');
+  });
+
+  it('accepts folder sources and folder actions, and rejects a non-string folder (T66)', () => {
+    const catalog: ActionsCatalog = {
+      apiVersion: 1,
+      workspace: '/repo',
+      sources: [
+        { layer: 'folder', path: '/repo/frontend/.dsh/actions.json', folder: '/repo/frontend', available: true, exists: true, errors: [] },
+      ],
+      actions: [{ ...ACTION, id: 'folder:frontend:build', sourceLayer: 'folder', folder: '/repo/frontend' }],
+      runs: [],
+    };
+    expect(parseActionsCatalog(catalog)).toEqual(catalog);
+    expect(() =>
+      parseActionsCatalog({
+        ...catalog,
+        sources: [{ layer: 'folder', path: '/p', folder: 42, available: true, errors: [] }],
       }),
     ).toThrow('Invalid action source status');
   });

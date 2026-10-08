@@ -6,13 +6,19 @@ import { createActionsApiRoutes } from './host/rpc/index.js';
 import type { ConnectionFetchRouteLike } from './host/rpc/index.js';
 import { createRunService, createSessionParamStore, resolveRunCapabilities } from './host/run/index.js';
 import { resolveActionsLayerPaths, resolveDshHome, sessionActionsPath } from './host/config/paths.js';
-import { deleteActionEntryFromFile, writeSessionActionEntry } from './host/config/session-file.js';
+import { deleteActionEntryFromFile, writeSessionActionEntry, writeSessionActionFolders } from './host/config/session-file.js';
 import { isSkillsLike, registerAuthoringSkill } from './host/skills.js';
 import { registerActionTools } from './host/tools/index.js';
 import type { ApprovalServiceLike, SandboxPolicyResolverLike, ToolsLike } from './host/tools/index.js';
 import type { HostContext } from './host/types.js';
 
 export const name = ACTIONS_PLUGIN_ID;
+export const ACTIONS_SERVICE = 'dshActions';
+
+export interface DshActionsService {
+  /** Replace the repository folders additionally loaded for one session. */
+  setSessionFolders(sessionId: string, workspace: string, folders: readonly string[]): Promise<void>;
+}
 
 /**
  * Services this bundle depends on.
@@ -91,6 +97,14 @@ export function apply(ctx: HostContext, internals: ApplyInternals = {}): void {
   const notifyCatalogChanged = (workspace: string): void => {
     for (const listener of Array.from(manualCatalogListeners.get(workspace) ?? [])) listener();
   };
+  const actionsService: DshActionsService = {
+    setSessionFolders: async (sessionId, workspace, folders) => {
+      const path = sessionActionsPath(resolveDshHome(), workspace, sessionId);
+      await writeSessionActionFolders(path, folders);
+      notifyCatalogChanged(workspace);
+    },
+  };
+  ctx.provide?.(ACTIONS_SERVICE, actionsService);
 
   // Agent tools share the same catalog and run service as the Web entry.
   // The sandbox policy resolver stamps each agent-initiated run with the
@@ -156,8 +170,15 @@ export function apply(ctx: HostContext, internals: ApplyInternals = {}): void {
     resolveSessionWorkspace,
     sessionParams,
     watchSession: (workspace, sessionId) => configWatcher.watchSession(workspace, sessionId),
+    // T66: a session-selected folder's config joins the same poll set, so a
+    // repository edit refreshes the catalog like any layer edit does.
+    watchFolder: (workspace, folder) => configWatcher.watchFolder(workspace, folder),
     // T50: layer → actions.json path, entry removal with atomic write-back.
     deleteActionEntry: async (layer, label, workspace, sessionId) => {
+      // T66: folder definitions belong to their repository. The panel offers no
+      // delete entry for them, and this refuses too — falling through to the
+      // global file would delete an unrelated same-label action.
+      if (layer === 'folder') return false;
       const layers = resolveActionsLayerPaths(workspace);
       const path =
         layer === 'session'

@@ -165,6 +165,15 @@ export interface RunRequestOptions {
    * hardcodes a mode (T8-B1).
    */
   sandboxPolicy?: SandboxExecutionPolicyLike | undefined;
+  /**
+   * T66: overrides the sandbox's `workspaceRoot` for this run. Used by folder
+   * actions whose directory lies outside the session workspace — the selected
+   * repository, not the aggregate parent, is then the write boundary. Inside
+   * the workspace the session root is kept, so selecting a sub-repository
+   * never narrows what an existing action could already do. The policy's
+   * *mode* is never chosen here.
+   */
+  sandboxRoot?: string | undefined;
 }
 
 export interface RunListFilter {
@@ -587,12 +596,17 @@ export function createRunService(deps: RunServiceDeps = {}): RunService {
       // session's own resolution, passed through with the run's workspace as
       // root; when the caller supplies none, the request carries no policy
       // field and the shell falls back to the deployment default (T8-B1).
+      // T66: a folder action may narrow the root to its own repository (see
+      // `sandboxRoot`); the mode itself is never chosen here.
       const request: ShellExecRequestLike = {
         command: evaluated.command,
         workdir: evaluated.cwd,
       };
       if (options.sandboxPolicy !== undefined) {
-        request.sandboxPolicy = { ...options.sandboxPolicy, workspaceRoot: options.workspace };
+        request.sandboxPolicy = {
+          ...options.sandboxPolicy,
+          workspaceRoot: options.sandboxRoot ?? options.workspace,
+        };
       }
       if (evaluated.env !== undefined) request.env = evaluated.env;
       let proc: ShellProcessLike;

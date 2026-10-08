@@ -101,6 +101,22 @@ export async function writeSessionActionEntry(
 }
 
 /**
+ * Replace the session's complete repository selection while preserving its
+ * session-local action entries. The caller passes workspace-relative or
+ * absolute folder paths; catalog loading performs the containment checks.
+ */
+export async function writeSessionActionFolders(
+  path: string,
+  folders: readonly string[],
+  io: SessionFileIO = defaultIo,
+): Promise<void> {
+  const config = (await readActionsFile(path, io)) ?? { version: ACTIONS_FILE_VERSION, actions: [] };
+  config.folders = [...folders];
+  if (!Array.isArray(config.actions)) config.actions = [];
+  await writeActionsFile(path, config, io);
+}
+
+/**
  * Remove the entry with `label` from the actions file at `path` (T50).
  * Returns false when the file or the entry does not exist. A broken file is
  * never clobbered — it throws.

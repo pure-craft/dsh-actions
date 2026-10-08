@@ -14,7 +14,7 @@ Action 定义的唯一来源是独立的 `actions.json`（**JSONC**：允许注�
 
 每个文件必须声明 `"version": "1.0.0"`——这是枚举白名单门，不是 semver；其他取值整层降级为 `unsupported-version`。
 
-顶层还可包含会话专用的 `folders: string[]`：它只在会话文件中有效，用来加载所列目录各自的 `.dsh/actions.json`。路径相对会话工作区；未写或空数组表示没有额外目录。它不参与三层合并，也不会改写目录中的配置。完整语义见[会话层](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/session-layer.md)。
+顶层还可包含会话专用的 `folders: string[]`：它只在会话文件中有效，用来加载所列目录各自的 `.dsh/actions.json`。路径相对会话工作区（绝对路径按原样用）；未写或空数组表示没有额外目录；重复目录合并为一个来源；写在工作区或全局文件里会被忽略并报错；目录不能是工作区根，也不能再声明 `folders`。它不参与三层合并，也不会改写目录中的配置：所选目录里的 Action 保持独立身份（`folder:<相对路径>:<label>`），其 `${workspaceFolder}` 与默认 cwd 都指向该目录。完整语义见[会话层](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/session-layer.md)。
 
 ## 字段全表
 

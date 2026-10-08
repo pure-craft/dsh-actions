@@ -154,8 +154,12 @@ export function mergeActionEntry(
   return merged;
 }
 
-function dedupeByLabel(entries: ActionEntryConfig[]): ActionEntryConfig[] {
-  // Last definition of a label wins within one layer; order follows first occurrence.
+/**
+ * Last definition of a label wins within one layer; order follows first
+ * occurrence. Exported because folder sources (T66) are independent layers
+ * that never merge across files but do dedupe within their own file.
+ */
+export function dedupeByLabel(entries: ActionEntryConfig[]): ActionEntryConfig[] {
   const byLabel = new Map<string, ActionEntryConfig>();
   for (const entry of entries) byLabel.set(entry.label, entry);
   return [...byLabel.values()];

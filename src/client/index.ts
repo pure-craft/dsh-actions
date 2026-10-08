@@ -114,7 +114,7 @@ export function apply(ctx: SlotContext): void {
         catalog: () => store.state.catalog,
         storeSessionId: () => store.state.sessionId,
         listCatalog: (sessionId) => api.listCatalog(sessionId),
-        sectionOf: makeSectionNamer(t),
+        sectionOf: makeSectionNamer(t, () => store.state.catalog?.workspace ?? ''),
         onOpen: (actionId) => {
           store.selectAction(actionId);
           ctx.sidebarRight.openTab(VIEW_ID);

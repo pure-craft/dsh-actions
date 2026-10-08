@@ -8,6 +8,7 @@ import type {
   ActionInputConfig,
   ActionRunStatus,
   ActionRunSummary,
+  ActionSourceLayer,
   ActionsCatalog,
   ProjectActionSummary,
   RunStartResult,
@@ -1634,8 +1635,8 @@ describe('composer @ reference source (T53)', () => {
     ...overrides,
   });
 
-  const sectionOf = (layer: 'global' | 'workspace' | 'session'): string =>
-    ({ global: 'Global', workspace: 'Workspace', session: 'Session' })[layer];
+  const sectionOf = (action: { sourceLayer: ActionSourceLayer }): string =>
+    ({ global: 'Global', workspace: 'Workspace', session: 'Session', folder: 'Folder' })[action.sourceLayer];
 
   it('builds the inline token from a label', () => {
     expect(buildActionToken('build')).toBe('@actions:build ');

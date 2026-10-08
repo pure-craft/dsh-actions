@@ -26,13 +26,27 @@
 
 规则刻意保持简单：
 
-- `folders` 只允许出现在会话层；全局或工作区文件中的同名字段无效；
-- 每个值是相对当前会话工作区的目录，加载 `<workspace>/<folder>/.dsh/actions.json`；
-- 它是完整的会话选择，不和其他层的 `folders` 做继承、并集或覆盖；
+- `folders` 只允许出现在会话层；全局或工作区文件里的同名字段被忽略，并在该来源上记一条错误（不会静默生效）；
+- 每个值是相对当前会话工作区的目录，加载 `<folder>/.dsh/actions.json`；绝对路径按原样使用；
+- 它是完整的会话选择，不和其他层做继承、并集或覆盖；重复或指向同一目录的写法会合并成一个来源；
 - 未写或写空数组都表示不加载额外目录；全局层、根工作区层和会话自己的 `actions` 仍照常加载；
-- 不复制所选仓库的 Action 定义，也不改写任何仓库文件；换一个会话可以选择完全不同的目录。
+- 不复制所选仓库的 Action 定义，也不改写任何仓库文件；换一个会话可以选择完全不同的目录；
+- 所选目录不能是工作区根目录本身（它已作为工作区层加载），也不能再声明自己的 `folders`——递归选择被拒绝，仓库无法藉此扩大自己的读取范围。
 
-因此 `folders` 是会话的动态上下文，不是团队共享配置。目录自身的配置继续跟随对应仓库，保持唯一事实源。
+**每个目录是独立来源，不与任何层合并。** 仓库 A 和仓库 B 各有一个 `build` 时，得到两个互不覆盖的 Action，id 形如 `folder:frontend:build`（`folder:<相对工作区的目录>:<label>`）。在该 Action 里：
+
+- `${workspaceFolder}` / `${workspaceFolderBasename}` 指向这个仓库目录，而不是会话工作区；
+- `options.cwd` 相对该目录解析，未写时默认就是该目录；
+- 相对 cwd 可以 `../` 回到上层，目录是解析基准而非写入边界；
+- 目录没有 `.dsh/actions.json` 是**正常空源**（`available: true` + `exists: false`）——选中一个仓库不等于它已经有 Actions；
+- 目录的配置文件损坏只降级该来源，其他来源照常加载。
+
+因为定义留在仓库里，面板不会为这些 Action 提供删除入口：文件属于仓库，会话只是指向它。
+
+## 写入路径：会话层由谁写
+
+- **Agent 写任务定义**：`actions_register`（见下节）。
+- **改 `folders` 选择**：宿主插件调用 `dshActions` Service 的 `setSessionFolders(sessionId, workspace, folders)`——它原子替换会话层的完整 `folders` 数组、保留已有会话 Actions，并立即通知 catalog 订阅者刷新；也可以直接编辑会话层的 `actions.json`。
 
 ## 写入路径：`actions_register`
 

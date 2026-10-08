@@ -14,7 +14,7 @@ The single source of Action definitions is a standalone `actions.json` (**JSONC*
 
 Every file must declare `"version": "1.0.0"` — this is an enum allowlist gate, not semver; any other value demotes the whole layer to `unsupported-version`.
 
-The top level may also contain session-only `folders: string[]`: it loads each listed directory's own `.dsh/actions.json`. Paths are relative to the session workspace; omission or an empty array means no extra directories. It does not participate in three-layer merging and never rewrites a directory's config. See [the session layer](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/session-layer.en.md) for the complete semantics.
+The top level may also contain session-only `folders: string[]`: it loads each listed directory's own `.dsh/actions.json`. Paths are relative to the session workspace (absolute paths are used as written); omission or an empty array means no extra directories; duplicates collapse into one source; writing it in a workspace or global file is ignored and reported as an error; a directory may be neither the workspace root nor a place that declares its own `folders`. It does not participate in three-layer merging and never rewrites a directory's config: Actions in a selected directory keep an independent identity (`folder:<relative path>:<label>`), and their `${workspaceFolder}` and default cwd point at that directory. See [the session layer](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/session-layer.en.md) for the complete semantics.
 
 ## Full field list
 

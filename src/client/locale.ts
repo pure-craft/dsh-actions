@@ -18,6 +18,8 @@ const zh = {
   sectionWorkspace: '工作区',
   sectionGlobal: '全局',
   sectionSession: '会话',
+  sectionFolder: '仓库目录',
+  folderEmptyTip: '该目录下没有 .dsh/actions.json',
   openConfig: '打开{layer}配置',
   // Empty-state / missing-config CTA (draft written via inputActions.setDraft)
   ctaButton: '让 DSH 帮我创建第一个 Action',
@@ -154,6 +156,8 @@ const en: Record<LocaleKey, string> = {
   sectionWorkspace: 'Workspace',
   sectionGlobal: 'Global',
   sectionSession: 'Session',
+  sectionFolder: 'Action folder',
+  folderEmptyTip: 'No .dsh/actions.json in this directory',
   openConfig: 'Open {layer} config',
   ctaButton: 'Create my first action with DSH',
   ctaCreate: 'Create',

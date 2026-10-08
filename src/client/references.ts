@@ -67,10 +67,14 @@ export function buildActionToken(label: string): string {
   return `@actions:${label} `;
 }
 
-/** Menu candidates for the @ trigger: every visible action, sectioned by layer. */
+/**
+ * Menu candidates for the @ trigger: every visible action, sectioned by
+ * layer — folder actions (T66) are sectioned by their own directory instead,
+ * which is why the namer receives the whole action.
+ */
 export function actionCandidates(
   actions: readonly ProjectActionSummary[],
-  sectionOf: (layer: ActionSourceLayer) => string,
+  sectionOf: (action: ProjectActionSummary) => string,
 ): ActionTriggerCandidate[] {
   return actions.map((action) => ({
     // `name` is the exact-match / first search key and falls back as display —
@@ -78,7 +82,7 @@ export function actionCandidates(
     name: `actions:${action.label}`,
     description: action.detail ?? action.command,
     value: action.id,
-    section: sectionOf(action.sourceLayer),
+    section: sectionOf(action),
     // T65: the same icon in all three surfaces (row / tab / menu).
     icon: () => React.createElement(ActionIcon, { icon: action.icon, size: 14 }),
   }));
@@ -140,7 +144,8 @@ export function serializeActionRef(
  * @param deps.storeSessionId - the session the store is currently bound to.
  * @param deps.listCatalog - direct catalog fetch by session (menu path before
  *   any panel mount).
- * @param deps.sectionOf - localized layer name for menu grouping.
+ * @param deps.sectionOf - localized section name for menu grouping; receives
+ *   the whole action so folder actions can be named after their directory.
  * @param deps.onOpen - chip click: open the Actions panel on that action.
  * @param deps.subscribe - store subscription driving lexicon invalidation.
  */
@@ -148,7 +153,7 @@ export function createActionsTriggerSource(deps: {
   catalog: () => ActionsCatalog | null;
   storeSessionId: () => string;
   listCatalog: (sessionId: string) => Promise<ActionsCatalog>;
-  sectionOf: (layer: ActionSourceLayer) => string;
+  sectionOf: (action: ProjectActionSummary) => string;
   onOpen: (actionId: string) => void;
   subscribe: (listener: () => void) => () => void;
 }): ActionsTriggerSourceLike {
@@ -236,17 +241,42 @@ export function createActionsTriggerSource(deps: {
   };
 }
 
-/** Locale key for a layer's menu section label. */
+/**
+ * Section title for one session-selected folder (T66): its path relative to
+ * the session workspace when it lives inside it, otherwise the absolute path.
+ * Dependency free — the client half has no `node:path`.
+ */
+export function folderSectionTitle(workspace: string, folder: string): string {
+  const base = workspace.replace(/\\/g, '/').replace(/\/+$/, '');
+  const target = folder.replace(/\\/g, '/').replace(/\/+$/, '');
+  if (base !== '' && target.startsWith(`${base}/`)) return target.slice(base.length + 1);
+  return target;
+}
+
+/**
+ * Locale key for a layer's menu section label. `folder` is only a fallback —
+ * `makeSectionNamer` names folder sections after their directory instead.
+ */
 export function sectionKeyOf(layer: ActionSourceLayer): LocaleKey {
   if (layer === 'global') return 'sectionGlobal';
   if (layer === 'session') return 'sectionSession';
+  if (layer === 'folder') return 'sectionFolder';
   return 'sectionWorkspace';
 }
 
 /** Bound t() variant for the trigger source deps (kept for type clarity). */
-export type SectionNamer = (layer: ActionSourceLayer) => string;
+export type SectionNamer = (action: ProjectActionSummary) => string;
 
-/** Helper used by index.ts to localize section names once. */
-export function makeSectionNamer(t: Translate): SectionNamer {
-  return (layer) => t(sectionKeyOf(layer));
+/**
+ * Helper used by index.ts to localize section names once. `workspaceOf` is
+ * read lazily per call, so the namer survives catalog reloads.
+ */
+export function makeSectionNamer(t: Translate, workspaceOf: () => string): SectionNamer {
+  return (action) => {
+    if (action.sourceLayer === 'folder') {
+      if (action.folder === undefined) return t('sectionFolder');
+      return folderSectionTitle(workspaceOf(), action.folder);
+    }
+    return t(sectionKeyOf(action.sourceLayer));
+  };
 }

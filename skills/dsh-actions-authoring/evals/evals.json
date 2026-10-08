@@ -70,7 +70,13 @@
     {
       "id": 12,
       "prompt": "当前 workspace 是多个 Git 仓库的上层目录。这次会话只会改 frontend 和 services/api；两个仓库都已经有自己的 .dsh/actions.json。帮我让当前会话能使用它们的 Actions，不要复制任务，也不要修改根目录或仓库配置。",
-      "expected_output": "Updates only the session-layer actions.json with top-level folders [\"frontend\", \"services/api\"] (preserving its existing actions and version), treating folders as the complete session selection; does not add folders to global/workspace config, does not union it with another layer, and does not copy either repository's action definitions into the session file.",
+      "expected_output": "Puts top-level folders [\"frontend\", \"services/api\"] in the session-layer actions.json only (preserving its existing actions and version), treating it as the complete session selection; does not add folders to global/workspace config (which is an error there, not a fallback), does not union it with another layer, and does not copy either repository's action definitions into the session file. Explains that the loaded Actions keep independent ids (folder:frontend:<label>) so two repositories may both define the same label without overriding each other, and that their cwd/`${workspaceFolder}` is the repository itself.",
+      "files": []
+    },
+    {
+      "id": 13,
+      "prompt": "我在会话里选了两个仓库目录，但 panels 里看不到它们的任务。frontend 下有 .dsh/actions.json，backend 下确认没有这个文件。帮我看下为什么。",
+      "expected_output": "Explains that a selected directory has no Actions when its own <folder>/.dsh/actions.json is absent — a normal empty source, not an error — and that the catalog lists each selected folder as a source (available with exists:false) while the panel names the directory in its own section. Checks the real reasons before concluding: the directory path as written (relative to the session workspace, so a typo silently selects a different directory), whether folders was written in the session layer rather than a workspace/global file (ignored with a source error there), whether the entry was the workspace root (refused), and whether the file failed to parse or has an unsupported version. Does not propose copying definitions or editing repository configs.",
       "files": []
     }
   ]

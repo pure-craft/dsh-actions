@@ -1,17 +1,22 @@
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { resolve } from 'node:path';
+import { relative, resolve, sep } from 'node:path';
 import type {
   ActionEntryConfig,
   ActionSourceLayer,
+  ActionSourceStatus,
   ActionsCatalog,
   ProjectActionSummary,
 } from '../contract.js';
 import { loadConfigLayer } from './config/load.js';
-import type { ReadFileText } from './config/load.js';
-import { mergeActionEntries, mergeActionEntry } from './config/merge.js';
-import { resolveActionsLayerPaths, resolveDshHome, sessionActionsPath } from './config/paths.js';
-import type { LoadedConfigLayer } from './config/load.js';
+import type { LoadedConfigLayer, ReadFileText } from './config/load.js';
+import { dedupeByLabel, mergeActionEntries, mergeActionEntry } from './config/merge.js';
+import {
+  folderActionsPath,
+  resolveActionsLayerPaths,
+  resolveDshHome,
+  sessionActionsPath,
+} from './config/paths.js';
 import { substituteVariables } from './config/variables.js';
 import type { VariableContext } from './config/variables.js';
 
@@ -44,11 +49,18 @@ function clampInstanceLimit(limit: number): number {
  * `${input:id}` placeholders stay verbatim here — inputs are declared on the
  * summary and resolved per run via `normalizeParams` + `substituteVariables`
  * with the run's values. (`context.inputs` is honored when a caller sets it.)
+ *
+ * T66: a folder action passes `scope`, which overrides both the id
+ * (`folder:<key>:<label>`) and the owning directory, and pairs with a
+ * `context` whose `workspaceFolder` is that folder — so `${workspaceFolder}`
+ * and the default cwd mean "the repository this Action belongs to", not the
+ * session workspace.
  */
 export function normalizeActionEntry(
   entry: ActionEntryConfig,
   layer: ActionSourceLayer,
   context: VariableContext,
+  scope?: { id: string; folder: string },
 ): ProjectActionSummary {
   const substitute = (text: string): string => substituteVariables(text, context);
   const rawCwd = entry.options?.cwd;
@@ -56,7 +68,7 @@ export function normalizeActionEntry(
     ? context.workspaceFolder
     : resolve(context.workspaceFolder, substitute(rawCwd));
   const summary: ProjectActionSummary = {
-    id: `${layer}:${entry.label}`,
+    id: scope?.id ?? `${layer}:${entry.label}`,
     label: entry.label,
     sourceLayer: layer,
     visibility: entry.visibility ?? 'all',
@@ -71,6 +83,7 @@ export function normalizeActionEntry(
       instancePolicy: entry.runOptions?.instancePolicy ?? 'reuse',
     },
   };
+  if (scope !== undefined) summary.folder = scope.folder;
   if (entry.detail !== undefined) summary.detail = substitute(entry.detail);
   // T65: ui-only display metadata, carried verbatim (Iconify code).
   if (entry.icon !== undefined) summary.icon = entry.icon;
@@ -158,11 +171,95 @@ function resolveEntryExtends(
 }
 
 /**
+ * One action entry contributed by a session-selected folder (T66), with the
+ * folder identity that keeps it apart from same-label actions elsewhere.
+ */
+interface FolderEntry {
+  entry: ActionEntryConfig;
+  layer: ActionSourceLayer;
+  folder: string;
+  id: string;
+}
+
+/** One loaded folder source: the directory, its id key, and its config. */
+interface FolderSource {
+  /** Absolute, normalized directory. */
+  folder: string;
+  /**
+   * Workspace-relative, `/`-separated key used in action ids. May start with
+   * `../` when the folder sits outside the workspace, which is allowed and
+   * stays unambiguous. (The panel derives its own display title from the
+   * absolute directory, so this key only has to be stable and unique.)
+   */
+  key: string;
+  layer: LoadedConfigLayer;
+}
+
+/** T66: stable id of an action defined in a selected folder. */
+export function folderActionId(key: string, label: string): string {
+  return `folder:${key}:${label}`;
+}
+
+/** T66: workspace-relative key for a selected folder (posix separators). */
+function folderKey(workspace: string, folder: string): string {
+  return relative(workspace, folder).split(sep).join('/');
+}
+
+/**
+ * T66: resolve the session's `folders` selection into loadable sources.
+ *
+ * The selection is taken verbatim — no inheritance, union or override — but
+ * two entries pointing at the same directory collapse into one source, and
+ * the workspace root is rejected with a source-level error (it already loads
+ * as the workspace layer; loading it twice would duplicate every action).
+ * Duplicates and rejections are reported on the session source, where the
+ * selection was written.
+ */
+async function resolveFolderSources(
+  workspace: string,
+  declared: string[],
+  sessionStatus: ActionSourceStatus,
+  read: ReadFileText,
+): Promise<FolderSource[]> {
+  const workspaceRoot = resolve(workspace);
+  const seen = new Set<string>();
+  const selected: Array<{ folder: string; key: string }> = [];
+  for (const entry of declared) {
+    const folder = resolve(workspace, entry);
+    if (folder === workspaceRoot) {
+      sessionStatus.errors.push(
+        `folders: "${entry}" is the session workspace root; its Actions already load from the workspace layer`,
+      );
+      continue;
+    }
+    if (seen.has(folder)) continue;
+    seen.add(folder);
+    selected.push({ folder, key: folderKey(workspace, folder) });
+  }
+  return Promise.all(selected.map(async ({ folder, key }) => {
+    const layer = await loadConfigLayer('folder', folderActionsPath(folder), read, folder);
+    // A folder without an actions.json is a healthy empty source, exactly like
+    // a session file that does not exist yet — selecting a repository is not a
+    // claim that it has Actions. `exists: false` keeps the fact visible.
+    if (layer.status.reason === 'definition-not-found') {
+      layer.status = { ...layer.status, available: true };
+    }
+    return { folder, key, layer };
+  }));
+}
+
+/**
  * Load the configuration layers for `workspace` (global + workspace, plus the
  * caller session's layer when `sessionId` is given — T47), merge them by
  * label (session wins), and normalize into the catalog. `runs` is left
  * empty; the run service owns it. Never throws: every failure degrades into
  * `sources[]` statuses.
+ *
+ * T66: when the session layer declares `folders`, each selected directory's
+ * own `.dsh/actions.json` loads as an independent source. Those entries are
+ * appended to the catalog **without joining the label merge** — two
+ * repositories may both define "build" and both stay addressable by their
+ * folder-scoped id.
  */
 export async function loadActionsCatalog(
   workspace: string,
@@ -181,6 +278,9 @@ export async function loadActionsCatalog(
       ? Promise.resolve(undefined)
       : loadSessionLayer(resolveDshHome(pathOptions), workspace, sessionId, read),
   ]);
+  const folderSources = sessionLayer === undefined
+    ? []
+    : await resolveFolderSources(workspace, sessionLayer.folders ?? [], sessionLayer.status, read);
   const context: VariableContext = {
     workspaceFolder: workspace,
     userHome: options.home ?? homedir(),
@@ -191,8 +291,18 @@ export async function loadActionsCatalog(
     workspaceLayer.entries,
     sessionLayer?.entries ?? [],
   );
+  const folderEntries: FolderEntry[] = folderSources.flatMap((source) =>
+    dedupeByLabel(source.layer.entries).map((entry) => ({
+      entry,
+      layer: 'folder' as ActionSourceLayer,
+      folder: source.folder,
+      id: folderActionId(source.key, entry.label),
+    })),
+  );
   // T61: extends indexes the RAW per-layer entries, not the merged winners —
-  // a shadowed entry stays referenceable by its own layer id.
+  // a shadowed entry stays referenceable by its own layer id. T66: folder
+  // entries join that index under their folder-scoped id, so a folder action
+  // can extend a base from any layer and vice versa.
   const rawById = new Map<string, ActionEntryConfig>();
   const rawLayers: Array<readonly [ActionSourceLayer, ActionEntryConfig[]]> = [
     ['global', globalLayer.entries],
@@ -202,10 +312,24 @@ export async function loadActionsCatalog(
   for (const [layer, entries] of rawLayers) {
     for (const entry of entries) rawById.set(`${layer}:${entry.label}`, entry);
   }
+  for (const item of folderEntries) rawById.set(item.id, item.entry);
   resolveEntryExtends(mergedEntries, rawById);
+  resolveEntryExtends(folderEntries, rawById);
   const actions = mergedEntries.map((merged) => normalizeActionEntry(merged.entry, merged.layer, context));
+  for (const item of folderEntries) {
+    const folderContext: VariableContext = {
+      workspaceFolder: item.folder,
+      userHome: context.userHome,
+    };
+    if (options.env !== undefined) folderContext.env = options.env;
+    actions.push(normalizeActionEntry(item.entry, 'folder', folderContext, {
+      id: item.id,
+      folder: item.folder,
+    }));
+  }
   const sources = [globalLayer.status, workspaceLayer.status];
   if (sessionLayer !== undefined) sources.push(sessionLayer.status);
+  for (const source of folderSources) sources.push(source.layer.status);
   return {
     apiVersion: 1,
     workspace,

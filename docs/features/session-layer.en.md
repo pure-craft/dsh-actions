@@ -26,13 +26,27 @@ When the workspace is merely an aggregate parent of several Git repositories, ea
 
 The rules are deliberately small:
 
-- `folders` is valid only in the session layer; the same field in a global or workspace file is invalid;
-- each value is a directory relative to the current session workspace, and loads `<workspace>/<folder>/.dsh/actions.json`;
-- it is the complete session selection and does not inherit, union, or override a `folders` value from another layer;
+- `folders` is valid only in the session layer; the same field in a global or workspace file is ignored and reported as an error on that source — never silently honored;
+- each value is a directory relative to the current session workspace and loads `<folder>/.dsh/actions.json`; absolute paths are used as written;
+- it is the complete session selection and does not inherit, union, or override anything from another layer; entries that resolve to the same directory collapse into one source;
 - an omitted field and an empty array both mean no extra directories; global, root-workspace, and session-local `actions` still load normally;
-- selected repository definitions are neither copied nor rewritten; another session may select a completely different set.
+- selected repository definitions are neither copied nor rewritten; another session may select a completely different set;
+- a selected directory may not be the workspace root itself (that already loads as the workspace layer), and it may not declare its own `folders` — recursive selection is refused, so a repository cannot widen what it can reach.
 
-`folders` is therefore dynamic session context, not team-shared configuration. Each directory's configuration continues to travel with its repository and remains the single source of truth.
+**Each directory is an independent source and merges with nothing.** When repository A and repository B both define `build`, you get two Actions that never override each other, with ids like `folder:frontend:build` (`folder:<path relative to the workspace>:<label>`). Inside such an Action:
+
+- `${workspaceFolder}` / `${workspaceFolderBasename}` point at that repository directory, not at the session workspace;
+- `options.cwd` resolves against that directory, and the default cwd is that directory;
+- a relative cwd may still climb out with `../` — the directory is a resolution base, not a write boundary;
+- a directory without `.dsh/actions.json` is a **normal empty source** (`available: true` + `exists: false`): selecting a repository is not a claim that it has Actions;
+- a broken config in one directory degrades only that source; the others still load.
+
+Because the definitions stay in the repositories, the panel offers no delete entry for these Actions: the file belongs to the repository, the session only points at it.
+
+## Write path: who writes the session layer
+
+- **An agent writes Action definitions** through `actions_register` (see below).
+- **Changing the `folders` selection**: a host plugin calls the `dshActions` Service method `setSessionFolders(sessionId, workspace, folders)`, which atomically replaces the session layer's complete `folders` array, preserves existing session Actions, and immediately notifies catalog subscribers; editing the session layer's `actions.json` directly works too.
 
 ## Write path: `actions_register`
 

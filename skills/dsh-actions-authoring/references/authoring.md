@@ -29,7 +29,7 @@ Three layers (merge priority ascending), all **JSONC** (comments and trailing co
 
 Every file must declare `"version": "1.0.0"` — an enum whitelist gate, not semver: any other value degrades the whole file with an `unsupported-version` source error.
 
-Only the session layer may also declare top-level `folders`. It selects extra repository-local definition files for that session; it is not an Action field and does not take part in layer merging.
+Only the session layer may also declare top-level `folders` — see [Selecting repository-local Actions](#selecting-repository-local-actions-folders). It is not an Action field, it never takes part in layer merging, and declaring it in a global or workspace file is an error rather than a fallback.
 
 ## Minimal example
 
@@ -75,11 +75,22 @@ Use this only when the session workspace is an aggregate directory above several
 
 Rules:
 
-- `folders` is accepted only at the session layer. Never add it to global or workspace config.
-- Each entry is a directory relative to the session workspace and loads `<workspace>/<folder>/.dsh/actions.json`.
-- The array is the complete set of extra directories for this session. It is not merged, unioned, or inherited across layers.
+- `folders` is accepted only at the session layer. A global or workspace file that sets it is ignored and gets a source error — never "copy it up" to make it work.
+- Each entry is a directory relative to the session workspace and loads `<folder>/.dsh/actions.json`; absolute paths are used as written.
+- The array is the complete set of extra directories for this session. It is not merged, unioned, or inherited across layers, and entries resolving to the same directory collapse into one source.
 - Omitted `folders` and `folders: []` both mean no extra directories. Global Actions, the root workspace's Actions, and the session's own `actions` remain available.
-- Do not copy selected definitions into the session file and do not rewrite repository configs. Edit `folders` when the session's repository set changes.
+- The workspace root itself is refused (it already loads as the workspace layer), and a selected directory's own config cannot declare `folders` — selection never recurses.
+- Do not copy selected definitions into the session file and do not rewrite repository configs. Change `folders` when the session's repository set changes.
+
+How a selected directory behaves once loaded:
+
+- Its Actions keep an independent identity: `folder:<path relative to the workspace>:<label>` (e.g. `folder:services/api:build`). Two repositories may both define `build` — neither overrides the other, and neither merges with a same-label Action in global/workspace/session config.
+- Inside such an Action `${workspaceFolder}` / `${workspaceFolderBasename}` are **that directory**, and `options.cwd` resolves against it (default: the directory itself). Write paths relative to the repository, not to the aggregate parent.
+- `extends` may cross sources: a folder Action can extend a `workspace:`/`global:` base, and a session entry can extend `folder:<path>:<label>`.
+- A directory without `.dsh/actions.json` is a normal empty source, not an error — selecting a repository does not require it to have Actions yet.
+- The panel offers no delete entry for these Actions: the repository owns its file.
+
+To change the selection, edit the session-layer file; host plugins can also call the `dshActions` Service's `setSessionFolders(sessionId, workspace, folders)`, which replaces the array while preserving session Actions.
 
 ## Field reference
 

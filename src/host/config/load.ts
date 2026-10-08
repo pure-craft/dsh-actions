@@ -15,9 +15,33 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 // JSONC parsing with per-entry fault tolerance
 // ---------------------------------------------------------------------------
 
+/** Successfully parsed file: the entries plus the top-level session-only `folders` (T66). */
+export interface ParsedActionsFile {
+  ok: true;
+  entries: ActionEntryConfig[];
+  folders?: string[];
+  errors: string[];
+}
+
 export type ParseActionsFileResult =
-  | { ok: true; entries: ActionEntryConfig[]; errors: string[] }
+  | ParsedActionsFile
   | { ok: false; reason: 'parse-error' | 'unsupported-version'; errors: string[] };
+
+/**
+ * Read the top-level session-only `folders` list (T66). A malformed value is
+ * a *field-level* fault, not a whole-file one: the entries still load and the
+ * problem is reported in `errors` — the same tolerance individual invalid
+ * entries get. Silently ignoring it is exactly the failure mode this field
+ * must not have.
+ */
+function readFolders(value: unknown, errors: string[]): string[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || !value.every((entry) => typeof entry === 'string' && entry.length > 0)) {
+    errors.push('Invalid actions file: folders must be an array of non-empty strings');
+    return undefined;
+  }
+  return value as string[];
+}
 
 /**
  * Parse `actions.json` JSONC text. Syntax errors and an unsupported/missing
@@ -46,14 +70,15 @@ export function parseActionsFileText(text: string): ParseActionsFileResult {
       errors: [`Unsupported actions file version: ${value.version}`],
     };
   }
-  if (value.actions === undefined) {
-    return { ok: true, entries: [], errors: [] };
-  }
+  const errors: string[] = [];
+  const folders = readFolders(value.folders, errors);
+  const result: ParsedActionsFile = { ok: true, entries: [], errors };
+  if (folders !== undefined) result.folders = folders;
+  if (value.actions === undefined) return result;
   if (!Array.isArray(value.actions)) {
     return { ok: false, reason: 'parse-error', errors: ['Invalid actions file: actions must be an array'] };
   }
   const entries: ActionEntryConfig[] = [];
-  const errors: string[] = [];
   value.actions.forEach((entry, index) => {
     try {
       // Wire validator (zod schema, T63a) with the entry's real index — the
@@ -64,7 +89,8 @@ export function parseActionsFileText(text: string): ParseActionsFileResult {
       errors.push(error instanceof Error ? error.message : String(error));
     }
   });
-  return { ok: true, entries, errors };
+  result.entries = entries;
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -75,6 +101,11 @@ export interface LoadedConfigLayer {
   status: ActionSourceStatus;
   /** Valid entries only; invalid ones are reported in `status.errors`. */
   entries: ActionEntryConfig[];
+  /**
+   * T66: the layer's declared `folders`, present only for the session layer —
+   * the field is meaningless anywhere else and is reported as an error there.
+   */
+  folders?: string[];
 }
 
 function isNotFound(error: unknown): boolean {
@@ -84,37 +115,56 @@ function isNotFound(error: unknown): boolean {
 /**
  * Load one configuration layer. A missing file degrades to
  * `definition-not-found`; the load never throws.
+ *
+ * `folder` tags the loaded source when it is one of the session's selected
+ * action directories (T66): several such sources share `layer: 'folder'`, so
+ * only this field tells them apart downstream.
  */
 export async function loadConfigLayer(
   layer: ActionSourceLayer,
   path: string,
   readFile: ReadFileText,
+  folder?: string,
 ): Promise<LoadedConfigLayer> {
+  const tagged = folder === undefined
+    ? { layer, path }
+    : { layer, path, folder };
   let text: string;
   try {
     text = await readFile(path);
   } catch (error) {
     if (isNotFound(error)) {
       return {
-        status: { layer, path, available: false, reason: 'definition-not-found', exists: false, errors: [] },
+        status: { ...tagged, available: false, reason: 'definition-not-found', exists: false, errors: [] },
         entries: [],
       };
     }
     const message = error instanceof Error ? error.message : String(error);
     return {
-      status: { layer, path, available: false, reason: 'parse-error', exists: true, errors: [`Failed to read: ${message}`] },
+      status: { ...tagged, available: false, reason: 'parse-error', exists: true, errors: [`Failed to read: ${message}`] },
       entries: [],
     };
   }
   const parsed = parseActionsFileText(text);
   if (!parsed.ok) {
     return {
-      status: { layer, path, available: false, reason: parsed.reason, exists: true, errors: parsed.errors },
+      status: { ...tagged, available: false, reason: parsed.reason, exists: true, errors: parsed.errors },
       entries: [],
     };
   }
-  return {
-    status: { layer, path, available: true, exists: true, errors: parsed.errors },
+  const loaded: LoadedConfigLayer = {
+    status: { ...tagged, available: true, exists: true, errors: parsed.errors },
     entries: parsed.entries,
   };
+  if (parsed.folders === undefined) return loaded;
+  if (layer !== 'session') {
+    // T66: only the session layer may select folders. Report it loudly — an
+    // ignored field would look like it worked.
+    loaded.status.errors.push(
+      `"folders" is only allowed in the session-layer actions.json; ignored in this ${layer} file`,
+    );
+    return loaded;
+  }
+  loaded.folders = parsed.folders;
+  return loaded;
 }

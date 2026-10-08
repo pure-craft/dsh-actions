@@ -176,6 +176,36 @@ describe('RunService lifecycle', () => {
     });
   });
 
+  it('binds a folder action outside the workspace to its own repository as the sandbox root', async () => {
+    const { service, shell } = makeService();
+    // T66: the agent entry stamps the session policy and may move the root to
+    // the selected repository; the policy's *mode* still comes from the caller.
+    await service.run(makeAction({ id: 'folder:../backend:build', sourceLayer: 'folder', folder: '/backend' }), {
+      workspace: WORKSPACE,
+      sessionId: SESSION,
+      sandboxPolicy: { mode: 'workspace-write', workspaceRoot: '/ignored', sessionId: SESSION },
+      sandboxRoot: '/backend',
+    });
+
+    expect(shell.requests[0]?.sandboxPolicy).toEqual({
+      mode: 'workspace-write',
+      workspaceRoot: '/backend',
+      sessionId: 'session-1',
+    });
+  });
+
+  it('ignores sandboxRoot when the caller passes no policy', async () => {
+    const { service, shell } = makeService();
+    await service.run(makeAction(), {
+      workspace: WORKSPACE,
+      sessionId: SESSION,
+      sandboxRoot: '/backend',
+    });
+
+    // No policy in, no policy out: the shell keeps its deployment default.
+    expect('sandboxPolicy' in (shell.requests[0] ?? {})).toBe(false);
+  });
+
   it('settles succeeded on exit code 0 with captured output', async () => {
     const { service, shell } = makeService();
     const runId = startedRunId(await service.run(makeAction(), { workspace: WORKSPACE, sessionId: SESSION }));

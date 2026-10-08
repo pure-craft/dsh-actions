@@ -8,12 +8,18 @@
  * missing/created/deleted/renamed files uniformly; stat failures (ENOENT &c)
  * count as "file absent". `fs.watch` stays a future optimization.
  *
+ * Files that are not layers are *enrolled* into the same poll set as they are
+ * discovered: a session's own layer (T47) and each Action folder that session
+ * selected (T66). Without the latter, editing a repository's
+ * `.dsh/actions.json` would not refresh the panel, breaking the documented
+ * "saving any actions.json takes effect immediately" promise.
+ *
  * Watchers share one poller per workspace; the last unsubscribe stops it.
  * Stat and the clock are injected for tests.
  */
 
 import { stat as nodeStat } from 'node:fs/promises';
-import { resolveActionsLayerPaths, resolveDshHome, sessionActionsPath } from './paths.js';
+import { folderActionsPath, resolveActionsLayerPaths, resolveDshHome, sessionActionsPath } from './paths.js';
 import type { ActionsLayerPaths } from './paths.js';
 
 export interface FileStatLike {
@@ -51,6 +57,14 @@ export interface ConfigWatcher {
    * enrolled file establishes its baseline silently (no spurious fire).
    */
   watchSession(workspace: string, sessionId: string): void;
+  /**
+   * T66: enroll one Action folder's config into the workspace's poll set.
+   * Called with the folders a catalog load actually resolved, so a folder
+   * dropped from the session's selection simply stops being requested — the
+   * stale path stays in the set and costs one stat, which is harmless.
+   * Idempotent, with the same silent-baseline rule as {@link watchSession}.
+   */
+  watchFolder(workspace: string, folder: string): void;
   /** Active per-workspace pollers (diagnostics/tests). */
   readonly activeWatchCount: number;
 }
@@ -71,7 +85,7 @@ interface WorkspacePoller {
    * must not silence the other (or stop the poller early).
    */
   listeners: Map<symbol, ConfigChangeListener>;
-  /** Extra enrolled files (session layers, T47) polled beside the two layers. */
+  /** Extra enrolled files (session layers T47, Action folders T66) polled beside the two layers. */
   extraPaths: Set<string>;
   stop: () => void;
 }
@@ -84,8 +98,8 @@ export function createConfigWatcher(deps: ConfigWatcherDeps = {}): ConfigWatcher
   const sessionPath = deps.sessionPath ?? ((workspace: string, sessionId: string) => sessionActionsPath(resolveDshHome(), workspace, sessionId));
 
   const pollers = new Map<string, WorkspacePoller>();
-  /** T47: session files enrolled before any subscriber exists (poller starts lazily). */
-  const pendingSessionPaths = new Map<string, Set<string>>();
+  /** Enrolled files registered before any subscriber exists (poller starts lazily). */
+  const pendingPaths = new Map<string, Set<string>>();
 
   async function signatureOf(path: string): Promise<string> {
     try {
@@ -99,7 +113,7 @@ export function createConfigWatcher(deps: ConfigWatcherDeps = {}): ConfigWatcher
   function startPoller(workspace: string): WorkspacePoller {
     const paths = resolvePaths(workspace);
     const listeners = new Map<symbol, ConfigChangeListener>();
-    const extraPaths = new Set<string>(pendingSessionPaths.get(workspace));
+    const extraPaths = new Set<string>(pendingPaths.get(workspace));
     // Per-path baselines: enrolling a session file mid-stream must not fire —
     // its first observation only establishes its own baseline (T47).
     const baselines = new Map<string, string>();
@@ -148,24 +162,32 @@ export function createConfigWatcher(deps: ConfigWatcherDeps = {}): ConfigWatcher
     };
   }
 
+  /** Shared enrollment for session layers (T47) and Action folders (T66). */
+  function enroll(workspace: string, path: string): void {
+    const poller = pollers.get(workspace);
+    if (poller !== undefined) {
+      poller.extraPaths.add(path);
+      return;
+    }
+    let pending = pendingPaths.get(workspace);
+    if (pending === undefined) {
+      pending = new Set();
+      pendingPaths.set(workspace, pending);
+    }
+    pending.add(path);
+  }
+
   return {
     get activeWatchCount() {
       return pollers.size;
     },
 
     watchSession(workspace, sessionId) {
-      const path = sessionPath(workspace, sessionId);
-      const poller = pollers.get(workspace);
-      if (poller !== undefined) {
-        poller.extraPaths.add(path);
-        return;
-      }
-      let pending = pendingSessionPaths.get(workspace);
-      if (pending === undefined) {
-        pending = new Set();
-        pendingSessionPaths.set(workspace, pending);
-      }
-      pending.add(path);
+      enroll(workspace, sessionPath(workspace, sessionId));
+    },
+
+    watchFolder(workspace, folder) {
+      enroll(workspace, folderActionsPath(folder));
     },
 
     watchWorkspace(workspace, listener) {

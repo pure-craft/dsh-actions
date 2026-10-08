@@ -29,7 +29,7 @@ function isStringRecord(value: unknown): value is Record<string, string> {
 }
 
 function isLayer(value: unknown): value is ActionSourceLayer {
-  return value === 'global' || value === 'workspace' || value === 'session';
+  return value === 'global' || value === 'workspace' || value === 'session' || value === 'folder';
 }
 
 function isVisibility(value: unknown): value is ActionVisibility {
@@ -196,6 +196,7 @@ export function parseProjectActionSummary(value: unknown): ProjectActionSummary 
     !optionalString(value.extends) ||
     !optionalString(value.detail) ||
     !optionalString(value.icon) ||
+    !optionalString(value.folder) ||
     (value.env !== undefined && !isStringRecord(value.env)) ||
     !isRecord(value.runOptions) ||
     !Number.isFinite(value.runOptions.instanceLimit) ||
@@ -221,6 +222,7 @@ export function parseActionSourceStatus(value: unknown): ActionSourceStatus {
       value.reason !== 'parse-error' &&
       value.reason !== 'unsupported-version') ||
     (value.exists !== undefined && typeof value.exists !== 'boolean') ||
+    !optionalString(value.folder) ||
     !Array.isArray(value.errors) ||
     !value.errors.every((entry) => typeof entry === 'string')
   ) {

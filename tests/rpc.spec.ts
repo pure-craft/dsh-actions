@@ -78,6 +78,7 @@ function createDeps(overrides: Partial<ActionsApiDeps> = {}): ActionsApiDeps & {
   if (overrides.sessionParams !== undefined) deps.sessionParams = overrides.sessionParams;
   if (overrides.notifyCatalogChanged !== undefined) deps.notifyCatalogChanged = overrides.notifyCatalogChanged;
   if (overrides.watchSession !== undefined) deps.watchSession = overrides.watchSession;
+  if (overrides.watchFolder !== undefined) deps.watchFolder = overrides.watchFolder;
   if (overrides.deleteActionEntry !== undefined) deps.deleteActionEntry = overrides.deleteActionEntry;
   return deps;
 }
@@ -258,6 +259,37 @@ describe('catalog endpoint', () => {
     const result = (await response.json()) as { kind: string; run: { workspace: string } };
     expect(result.kind).toBe('started');
     expect(result.run.workspace).toBe('/repo');
+    deps.runs.dispose();
+  });
+
+  it('enrolls every resolved Action folder into the config watcher (T66)', async () => {
+    const enrolled: Array<[string, string]> = [];
+    const folderSource = {
+      layer: 'folder' as const,
+      path: '/repo/frontend/.dsh/actions.json',
+      folder: '/repo/frontend',
+      available: true,
+      exists: true,
+      errors: [],
+    };
+    const deps = createDeps({
+      loadCatalog: async () => ({
+        apiVersion: 1,
+        workspace: '/repo',
+        sources: [
+          { layer: 'workspace', path: '/repo/.dsh/actions.json', available: true, errors: [] },
+          folderSource,
+        ],
+        actions: [ACTION],
+        runs: [],
+      }),
+      watchFolder: (workspace, folder) => { enrolled.push([workspace, folder]); },
+    });
+
+    await route(deps, ACTIONS_API_PATHS.catalog).fetch(post({ workspace: '/repo' }));
+
+    // Only folder sources enroll; the layers are always polled anyway.
+    expect(enrolled).toEqual([['/repo', '/repo/frontend']]);
     deps.runs.dispose();
   });
 

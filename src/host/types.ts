@@ -24,5 +24,6 @@ export interface HostResponse {
  */
 export interface HostContext {
   get(key: string): unknown;
+  provide?(key: string, value: unknown): unknown;
   effect(factory: () => (() => void) | void, label?: string): void;
 }
