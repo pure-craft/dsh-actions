@@ -46,7 +46,7 @@ Because the definitions stay in the repositories, the panel offers no delete ent
 ## Write path: who writes the session layer
 
 - **An agent writes Action definitions** through `actions_register` (see below).
-- **Changing the `folders` selection**: a host plugin calls the `dshActions` Service method `setSessionFolders(sessionId, workspace, folders)`, which atomically replaces the session layer's complete `folders` array, preserves existing session Actions, and immediately notifies catalog subscribers; editing the session layer's `actions.json` directly works too.
+- **Changing the `folders` selection**: a host plugin calls the `dshActions` Service method `setSessionFolders(sessionId, workspace, folders)`, which atomically replaces the session layer's complete `folders` array, preserves existing session Actions, and immediately notifies catalog subscribers; editing the session layer's `actions.json` directly works too (the session section's edit button in the panel opens exactly that file, once it exists). There is **no** folder-picker UI and **no** agent tool today: the selection belongs to the user or the host plugin, and agents only consume it (`actions_list` carries the caller's session, so a selected directory's Actions show up).
 
 ## Write path: `actions_register`
 

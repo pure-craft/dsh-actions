@@ -46,7 +46,7 @@
 ## 写入路径：会话层由谁写
 
 - **Agent 写任务定义**：`actions_register`（见下节）。
-- **改 `folders` 选择**：宿主插件调用 `dshActions` Service 的 `setSessionFolders(sessionId, workspace, folders)`——它原子替换会话层的完整 `folders` 数组、保留已有会话 Actions，并立即通知 catalog 订阅者刷新；也可以直接编辑会话层的 `actions.json`。
+- **改 `folders` 选择**：宿主插件调用 `dshActions` Service 的 `setSessionFolders(sessionId, workspace, folders)`——它原子替换会话层的完整 `folders` 数组、保留已有会话 Actions，并立即通知 catalog 订阅者刷新；也可以直接编辑会话层的 `actions.json`（面板里会话分区的编辑按钮就是打开这个文件，文件存在时可见）。目前**没有**目录选择器 UI，也**没有**对应的 Agent 工具：选择由用户或宿主插件决定，Agent 只是消费它（`actions_list` 会带上自己的会话，因此能看到所选目录里的 Action）。
 
 ## 写入路径：`actions_register`
 

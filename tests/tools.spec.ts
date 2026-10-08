@@ -226,6 +226,41 @@ describe('actions_list', () => {
     expect(result.actions.map((action) => action.id)).toEqual(['workspace:all', 'global:agent']);
   });
 
+  it('sees Actions from session-selected folders, with no extra tool (T66)', async () => {
+    // The read path is the whole agent-side story: `actions_list` must load the
+    // catalog WITH the calling session, or the session's `folders` would never
+    // be discovered, and the folder-scoped id must be addressable by id.
+    const seen: Array<string | undefined> = [];
+    const folderAction = makeAction({
+      id: 'folder:frontend:build',
+      label: 'build',
+      sourceLayer: 'folder',
+      folder: '/ws/frontend',
+      command: 'vite build',
+      cwd: '/ws/frontend',
+    });
+    const catalog: ActionCatalogProvider = {
+      loadCatalog: (workspace, sessionId) => {
+        seen.push(sessionId);
+        return Promise.resolve(makeCatalog([makeAction(), folderAction]));
+      },
+    };
+    const runs = new FakeRunService();
+    const tools = new FakeTools();
+    registerActionTools(tools, { catalog, runs, sessionParams: createSessionParamStore() });
+
+    const list = (await tools.definitions.get('actions_list')!.execute({}, AGENT_EXEC)) as {
+      actions: Array<{ id: string; sourceLayer: string }>;
+    };
+    expect(seen).toEqual(['session-1']);
+    expect(list.actions).toContainEqual(
+      expect.objectContaining({ id: 'folder:frontend:build', sourceLayer: 'folder' }),
+    );
+
+    await tools.definitions.get('actions_run')!.execute({ actionId: 'folder:frontend:build' }, AGENT_EXEC);
+    expect(runs.runCalls[0]?.action.id).toBe('folder:frontend:build');
+  });
+
   it('reports the active run status and runId', async () => {
     const { get, runs } = makeFixture();
     runs.runs.push(makeRun({ status: 'running' }));
