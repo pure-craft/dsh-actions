@@ -96,6 +96,8 @@ export const ACTIONS_CSS = `
    panel-feel floor), long output scrolls inside at the same 45vh ceiling. */
 .dsh-actions-card { max-height: 45vh; overflow-y: auto; }
 
+/* Run is the row's primary action; use the same business blue as the guide icon. */
+.dsh-actions-run-icon { display: inline-flex; color: var(--dsw-alias-state-business-primary); }
 /* Every stop/cancel affordance carries the host error color */
 .dsh-actions-danger-icon { display: inline-flex; color: var(--dsw-alias-state-error-primary); }
 

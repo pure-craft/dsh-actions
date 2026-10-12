@@ -150,6 +150,11 @@ function dangerIcon(icon: React.ReactNode): React.ReactNode {
   return h('span', { className: 'dsh-actions-danger-icon' }, icon);
 }
 
+/** Run affordances use the host accent color so the primary row action reads clearly. */
+function runIcon(icon: React.ReactNode): React.ReactNode {
+  return h('span', { className: 'dsh-actions-run-icon' }, icon);
+}
+
 /** Icon-only action button wrapped for the host Tooltip (which needs a native anchor). */
 function IconAction(props: {
   label: string;
@@ -341,7 +346,7 @@ function ActionRow(props: RowProps): React.ReactElement {
           })
         : h(IconAction, {
             label: t('run'),
-            icon: h(IconPlayOutlineRegular, { size: 16 }),
+            icon: runIcon(h(IconPlayOutlineRegular, { size: 16 })),
             onClick: (event) => { event.stopPropagation(); props.onRun(); },
           }),
       // T51: send-to-chat (@ glyph — the official set has no at-icon, so the

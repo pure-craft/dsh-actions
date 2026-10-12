@@ -37,9 +37,15 @@ Only the session layer may also declare top-level `folders` — see [Selecting r
 {
   "version": "1.0.0",
   "actions": [
-    { "label": "check", "command": "pnpm check", "detail": "Typecheck + lint + tests" },
+    {
+      "label": "check",
+      "icon": "lucide:circle-check",
+      "command": "pnpm check",
+      "detail": "Typecheck + lint + tests"
+    },
     {
       "label": "dev",
+      "icon": "lucide:eye",
       "command": "pnpm run dev",
       "runOptions": { "instancePolicy": "reject" }  // exclusive: one watcher at a time
     },
@@ -108,7 +114,22 @@ To change the selection, edit the session-layer file; host plugins can also call
 | `presentation.panel` | no | How runs appear in the panel's run-tab workspace. `new` (default): every run opens its own tab; older runs stay as tabs. `dedicated`: the action owns a single tab — re-running replaces its content in place (previous output is discarded from view; the run record is kept). `append`: like `dedicated`, but new output appends below the previous runs' output with a boundary line (VS Code shared-terminal style). Presentation-only — runs stay separate internally and `actions_inspect` is unaffected. |
 | `inputs` | no | Declared parameters — see [Parameters](#parameters-inputs). |
 | `extends` | no | Inherit another action's definition (`"<layer>:<label>"`) as this entry's base — see [Inheritance](#inheritance-extends). |
-| `icon` | no | Panel icon as an Iconify code (`collection:name`, `lucide:` recommended). UI-only — agent-facing surfaces are a whitelisted field set that structurally excludes it, so never expect an agent to see it. |
+| `icon` | no | Panel icon as an Iconify code (`collection:name`, `lucide:` recommended). Add one to commonly used panel-visible Actions so they are easier to scan. UI-only — agent-facing surfaces are a whitelisted field set that structurally excludes it, so never expect an agent to see it. |
+
+### Choosing icons
+
+For Actions shown in the panel (`visibility: "all"` or `"ui"`), prefer a simple semantic icon. Keep icons consistent across Actions with the same purpose, and use `lucide:` unless the project already has a coherent Iconify collection. Useful defaults:
+
+| Purpose | Recommended icon |
+| --- | --- |
+| Check / validate | `lucide:circle-check` |
+| Build / package | `lucide:package` |
+| Test | `lucide:flask-conical` |
+| Development watcher | `lucide:eye` |
+| Lint / format | `lucide:paintbrush` |
+| Deploy / publish | `lucide:upload` |
+
+An icon supplements the text; it never replaces a short stable `label` or an informative `detail`. Do not spend time adding one to `visibility: "agent"` Actions because agent-facing surfaces do not receive the field.
 
 ## Variable substitution (minimal set)
 
@@ -205,5 +226,6 @@ Why: JSON string + shell quoting is a double-escaping trap that produces command
 
 1. Edit (or create) the appropriate layer's `actions.json`. In the panel, each layer header's edit button opens the exact file in DSH's file viewer.
 2. Keep `label` short and stable — it is the merge key and the stable-id basis. Put the explanation in `detail`.
-3. Set `runOptions.instancePolicy: "reject"` for actions that must never overlap (watchers, migrators, anything stateful); set `approval` for destructive ones.
-4. Verify: `actions_list` shows the new/changed entry (respecting `visibility`), or the panel updates automatically — saving a configuration file takes effect without a manual refresh. If an entry is missing, check the source banner for a per-entry validation error.
+3. For commonly used panel-visible Actions, add a semantic Iconify `icon` (prefer `lucide:` and reuse the same icon for the same purpose). Skip it for agent-only entries.
+4. Set `runOptions.instancePolicy: "reject"` for actions that must never overlap (watchers, migrators, anything stateful); set `approval` for destructive ones.
+5. Verify: `actions_list` shows the new/changed entry (respecting `visibility`), or the panel updates automatically — saving a configuration file takes effect without a manual refresh. If an entry is missing, check the source banner for a per-entry validation error.
