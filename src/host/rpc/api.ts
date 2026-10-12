@@ -31,7 +31,7 @@
 import { ACTIONS_PLUGIN_ID } from '../../contract.js';
 import type { ActionSourceLayer, ActionsCatalog, CatalogEventFrame, RunDiscoveryFrame, RunStreamFrame } from '../../contract.js';
 import { RunServiceError } from '../run/service.js';
-import type { RunInspection, RunService } from '../run/service.js';
+import type { RunInspection, RunService, SandboxExecutionPolicyLike } from '../run/service.js';
 import type { SessionParamStore } from '../run/session-params.js';
 
 /** Structural mirror of the connection.fetch route shape the host consumes. */
@@ -51,6 +51,12 @@ export interface ActionsApiDeps {
    * (composition wires this to the agents registry's session cwd).
    */
   resolveSessionWorkspace?(sessionId: string): string | undefined;
+  /**
+   * Policy used only by the authenticated Web manual-run endpoint. The Host
+   * fixes this to local-user execution; request bodies cannot select or widen
+   * it. Agent tools resolve their calling session policy separately.
+   */
+  manualRunSandboxPolicy(workspace: string, sessionId: string): SandboxExecutionPolicyLike;
   /**
    * Polling configuration watcher (T21), wired from `createConfigWatcher`.
    * Without it /catalog/events serves only the first-frame snapshot.
@@ -550,12 +556,16 @@ export function createActionsApiRoutes(deps: ActionsApiDeps): ConnectionFetchRou
               `Action "${action.label}" requires explicit confirmation; resend with "confirmed": true`,
             );
           }
-          // T66 × T8-B1: a folder action's cwd already points into its own
-          // repository (the catalog resolved it there). The sandbox *root* is
-          // deliberately not touched on this path — the Web entry passes no
-          // policy at all, so runs keep falling back to the deployment
-          // default; only the agent entry (which stamps a policy) can move it.
-          const result = await deps.runs.run(action, { workspace: scope.workspace, sessionId: scope.sessionId, params });
+          // Manual Web runs are a distinct trusted Host entry from the Agent
+          // tool. The Host fixes their execution policy; the client cannot send
+          // a mode or impersonate an elevated origin in the request body.
+          const sandboxPolicy = deps.manualRunSandboxPolicy(scope.workspace, scope.sessionId);
+          const result = await deps.runs.run(action, {
+            workspace: scope.workspace,
+            sessionId: scope.sessionId,
+            params,
+            sandboxPolicy,
+          });
           return json(result);
         } catch (error) {
           return mapRunServiceError(error);

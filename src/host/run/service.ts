@@ -157,12 +157,12 @@ export interface RunRequestOptions {
   /** Owning agent, forwarded to `ctx.jobs` for owner fencing. */
   owner?: AgentLike | undefined;
   /**
-   * Sandbox policy resolved for the *calling session* (via
-   * `ctx.sandboxPolicy.resolve({ session })` at the entry layer). Passed to
-   * the shell verbatim except `workspaceRoot`, which is always this run's
-   * workspace. When omitted the shell request carries no policy field and
-   * the shell falls back to the deployment default — the run service never
-   * hardcodes a mode (T8-B1).
+   * Execution policy selected by the trusted Host entry: Agent tools resolve
+   * the calling session sandbox, while the manual Web route selects local-user
+   * execution. Passed to the shell verbatim except `workspaceRoot`, which is
+   * bound to this run's workspace or the explicit `sandboxRoot`. When omitted,
+   * the shell request carries no policy and uses its deployment default; entry
+   * points that require a specific boundary must therefore always provide one.
    */
   sandboxPolicy?: SandboxExecutionPolicyLike | undefined;
   /**
@@ -592,12 +592,12 @@ export function createRunService(deps: RunServiceDeps = {}): RunService {
       records.set(record.summary.id, record);
       emitChange(record);
 
-      // 4. Launch through the host shell. The sandbox policy is the calling
-      // session's own resolution, passed through with the run's workspace as
-      // root; when the caller supplies none, the request carries no policy
-      // field and the shell falls back to the deployment default (T8-B1).
-      // T66: a folder action may narrow the root to its own repository (see
-      // `sandboxRoot`); the mode itself is never chosen here.
+      // 4. Launch through the host shell. The trusted entry point chooses the
+      // policy (manual local-user or Agent session sandbox); this lifecycle
+      // service only binds its workspace root. A missing policy intentionally
+      // preserves the shell deployment default for non-entry test/embedding
+      // callers. T66 folder actions may override the Agent sandbox root via
+      // `sandboxRoot`; the mode itself is never chosen here.
       const request: ShellExecRequestLike = {
         command: evaluated.command,
         workdir: evaluated.cwd,

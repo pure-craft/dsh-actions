@@ -135,10 +135,10 @@ export function apply(ctx: HostContext, internals: ApplyInternals = {}): void {
   };
   ctx.provide?.(ACTIONS_SERVICE, actionsService);
 
-  // Agent tools share the same catalog and run service as the Web entry.
-  // The sandbox policy resolver stamps each agent-initiated run with the
-  // calling session's own policy (T8-B1); the Web entry passes no policy and
-  // runs fall back to the shell's deployment default.
+  // Agent tools share the same catalog and run lifecycle as the Web entry,
+  // while selecting a different execution policy at their trusted Host entry.
+  // Agent runs inherit the calling session sandbox; manual Web runs are fixed
+  // below to local-user execution and cannot choose that mode in request data.
   const sandboxPolicy = ctx.get('sandboxPolicy');
   const sandboxPolicyResolver = isSandboxPolicyResolverLike(sandboxPolicy) ? sandboxPolicy : undefined;
   // T29: approval-gated actions (approval: agent|always) ask through the
@@ -197,6 +197,14 @@ export function apply(ctx: HostContext, internals: ApplyInternals = {}): void {
     loadCatalog: catalog.loadCatalog,
     runs,
     resolveSessionWorkspace,
+    // A foreground user click is the VS Code Tasks-like local execution path.
+    // This policy is attached by the Host route, never accepted from the Web
+    // request body; actions_run continues to use the session resolver above.
+    manualRunSandboxPolicy: (workspace, sessionId) => ({
+      mode: 'danger-full-access',
+      workspaceRoot: workspace,
+      sessionId,
+    }),
     sessionParams,
     watchSession: (workspace, sessionId) => configWatcher.watchSession(workspace, sessionId),
     // T66: a session-selected folder's config joins the same poll set, so a

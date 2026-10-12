@@ -3,7 +3,7 @@ import type { ActionsCatalog, ProjectActionSummary, RunStreamFrame } from '../sr
 import { ACTIONS_API_PATHS, createActionsApiRoutes } from '../src/host/rpc/index.js';
 import type { ActionsApiDeps } from '../src/host/rpc/index.js';
 import { createRunService, createSessionParamStore } from '../src/host/run/index.js';
-import type { RunService, ShellProcessLike } from '../src/host/run/index.js';
+import type { RunService, ShellExecRequestLike, ShellProcessLike } from '../src/host/run/index.js';
 
 const ACTION: ProjectActionSummary = {
   id: 'workspace:build',
@@ -73,6 +73,9 @@ function createDeps(overrides: Partial<ActionsApiDeps> = {}): ActionsApiDeps & {
     resolveSessionWorkspace:
       overrides.resolveSessionWorkspace ??
       ((sessionId) => (sessionId === 'session-1' || sessionId === 'session-2' ? '/repo' : undefined)),
+    manualRunSandboxPolicy:
+      overrides.manualRunSandboxPolicy ??
+      ((workspace, sessionId) => ({ mode: 'danger-full-access', workspaceRoot: workspace, sessionId })),
   };
   if (overrides.watchCatalogChanges !== undefined) deps.watchCatalogChanges = overrides.watchCatalogChanges;
   if (overrides.sessionParams !== undefined) deps.sessionParams = overrides.sessionParams;
@@ -315,6 +318,47 @@ describe('catalog endpoint', () => {
 });
 
 describe('runs endpoint', () => {
+  it('stamps Host-selected local-user policy onto manual Web runs', async () => {
+    const requests: ShellExecRequestLike[] = [];
+    const proc = fakeShellProcess([]);
+    const runs = createRunService({
+      shell: {
+        resolve: (request) => {
+          requests.push(request);
+          return request;
+        },
+        execute: async () => proc,
+      },
+      pollIntervalMs: 1,
+      sleep: () => Promise.resolve(),
+    });
+    const deps = createDeps({
+      runs,
+      manualRunSandboxPolicy: (workspace, sessionId) => ({
+        mode: 'danger-full-access',
+        workspaceRoot: workspace,
+        sessionId,
+      }),
+    });
+
+    const response = await route(deps, ACTIONS_API_PATHS.runs).fetch(
+      post({
+        sessionId: 'session-1',
+        actionId: ACTION.id,
+        sandboxPolicy: { mode: 'read-only', workspaceRoot: '/attacker-controlled' },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(requests[0]?.sandboxPolicy).toEqual({
+      mode: 'danger-full-access',
+      workspaceRoot: '/repo',
+      sessionId: 'session-1',
+    });
+    proc.finish(0);
+    runs.dispose();
+  });
+
   it('starts a run and reports conflicts through the protocol', async () => {
     const deps = createDeps();
     const start = route(deps, ACTIONS_API_PATHS.runs);
