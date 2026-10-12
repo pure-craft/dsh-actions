@@ -26,8 +26,16 @@ export const ACTIONS_CSS = `
 .dsh-actions-section-head { height: 36px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 8px; color: var(--dsw-alias-label-tertiary); font-size: 12px; font-weight: 500; line-height: 20px; user-select: none; }
 .dsh-actions-section-actions { display: flex; align-items: center; gap: 4px; flex: none; }
 .dsh-actions-section-title { display: inline-flex; align-items: center; gap: 6px; }
+.dsh-actions-section-label { min-width: 0; }
 .dsh-actions-section-tip { font-size: 12px; color: var(--dsw-alias-label-caption); font-weight: 400; margin-left: 6px; }
 .dsh-actions-section-icon { display: inline-flex; color: var(--dsw-alias-label-tertiary); }
+/* Empty selected folders are diagnostic hints, not full content sections. Keep
+   consecutive misses compact so they do not create a large visual dead zone. */
+.dsh-actions-section-empty-folder + .dsh-actions-section-empty-folder { margin-top: -14px; }
+.dsh-actions-section-empty-folder .dsh-actions-section-head { height: 28px; }
+.dsh-actions-section-empty-folder .dsh-actions-section-title { min-width: 0; width: 100%; }
+.dsh-actions-section-empty-folder .dsh-actions-section-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dsh-actions-section-empty-folder .dsh-actions-section-tip { flex: none; }
 .dsh-actions-rows { display: flex; flex-direction: column; gap: 2px; }
 .dsh-actions-row { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 4px 8px; border-radius: 8px; }
 .dsh-actions-row:hover { background: var(--dsw-alias-interactive-bg-hover); }

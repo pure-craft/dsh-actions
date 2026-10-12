@@ -1,7 +1,7 @@
 export const LOCALE_NS = 'dsh-actions';
 
 const zh = {
-  nav: 'Actions',
+  nav: '快捷操作',
   title: 'DSH Actions',
   subtitle: '运行此工作区与全局配置的 Actions',
   loading: '正在读取 Actions…',

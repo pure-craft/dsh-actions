@@ -189,7 +189,7 @@ Agent 侧一共 6 个工具：`actions_list` / `actions_run` / `actions_inspect`
 
 每个被选中的目录都是独立来源：当 `frontend` 和 `services/api` 都有一个 `build` 时，它们是两个互不覆盖的 Action，id 分别形如 `folder:frontend:build`、`folder:services/api:build`；其中的 `${workspaceFolder}` 与默认工作目录都指向该仓库自身，命令就在那个仓库里执行。
 
-需要确定性地管理这份动态选择的 Host 插件可使用 `dshActions` Service 的 `setSessionFolders(sessionId, workspace, folders)`：它原子写回会话层的完整 `folders` 数组、保留已有会话 Actions，并立即通知 catalog 订阅者刷新。
+需要确定性地管理完整会话配置的 Host 插件可使用 `dshActions` Service：`configureSession(sessionId, workspace, { folders, actions })` 在一次原子写入中替换两者，保留会话文件的 `version` 并立即刷新 catalog；`clearSession(sessionId, workspace)` 原子清空两者。兼容方法 `setSessionFolders(sessionId, workspace, folders)` 仍只替换完整 `folders` 数组并保留已有会话 Actions。
 
 字段级细节见 [配置参考](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/configuration.md)，会话层的存储与生命周期见 [会话层](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/session-layer.md)。
 

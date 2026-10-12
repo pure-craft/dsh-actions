@@ -24,15 +24,15 @@ const VIEW_ID = ACTIONS_PLUGIN_ID;
 /**
  * Guide-card icon on the right sidebar's 开始 page: the circled-play artwork
  * chosen by the user (ring + play triangle in one path), tinted with the
- * business primary so it carries the same accent weight as the folder card.
+ * business primary and kept slightly smaller than the original card icon.
  */
 function GuideIcon(): React.ReactElement {
   return React.createElement(
     'svg',
     {
       viewBox: '0 0 1024 1024',
-      width: 24,
-      height: 24,
+      width: 20,
+      height: 20,
       fill: 'var(--dsw-alias-state-business-primary)',
       'aria-hidden': true,
     },

@@ -6,17 +6,37 @@ import { createActionsApiRoutes } from './host/rpc/index.js';
 import type { ConnectionFetchRouteLike } from './host/rpc/index.js';
 import { createRunService, createSessionParamStore, resolveRunCapabilities } from './host/run/index.js';
 import { resolveActionsLayerPaths, resolveDshHome, sessionActionsPath } from './host/config/paths.js';
-import { deleteActionEntryFromFile, writeSessionActionEntry, writeSessionActionFolders } from './host/config/session-file.js';
+import {
+  clearSessionActionsFile,
+  configureSessionActionsFile,
+  deleteActionEntryFromFile,
+  writeSessionActionEntry,
+  writeSessionActionFolders,
+} from './host/config/session-file.js';
 import { isSkillsLike, registerAuthoringSkill } from './host/skills.js';
 import { registerActionTools } from './host/tools/index.js';
 import type { ApprovalServiceLike, SandboxPolicyResolverLike, ToolsLike } from './host/tools/index.js';
 import type { HostContext } from './host/types.js';
+import type { ActionEntryConfig } from './contract.js';
 
 export const name = ACTIONS_PLUGIN_ID;
 export const ACTIONS_SERVICE = 'dshActions';
 
+export interface DshActionsSessionConfiguration {
+  readonly folders: readonly string[];
+  readonly actions: readonly ActionEntryConfig[];
+}
+
 export interface DshActionsService {
-  /** Replace the repository folders additionally loaded for one session. */
+  /** Atomically replace the complete session layer and refresh its catalog. */
+  configureSession(
+    sessionId: string,
+    workspace: string,
+    configuration: DshActionsSessionConfiguration,
+  ): Promise<void>;
+  /** Reset the session layer to empty folders and actions, then refresh. */
+  clearSession(sessionId: string, workspace: string): Promise<void>;
+  /** Compatibility helper: replace only folders while preserving actions. */
   setSessionFolders(sessionId: string, workspace: string, folders: readonly string[]): Promise<void>;
 }
 
@@ -97,10 +117,19 @@ export function apply(ctx: HostContext, internals: ApplyInternals = {}): void {
   const notifyCatalogChanged = (workspace: string): void => {
     for (const listener of Array.from(manualCatalogListeners.get(workspace) ?? [])) listener();
   };
+  const sessionFilePath = (sessionId: string, workspace: string): string =>
+    sessionActionsPath(resolveDshHome(), workspace, sessionId);
   const actionsService: DshActionsService = {
+    configureSession: async (sessionId, workspace, configuration) => {
+      await configureSessionActionsFile(sessionFilePath(sessionId, workspace), configuration);
+      notifyCatalogChanged(workspace);
+    },
+    clearSession: async (sessionId, workspace) => {
+      await clearSessionActionsFile(sessionFilePath(sessionId, workspace));
+      notifyCatalogChanged(workspace);
+    },
     setSessionFolders: async (sessionId, workspace, folders) => {
-      const path = sessionActionsPath(resolveDshHome(), workspace, sessionId);
-      await writeSessionActionFolders(path, folders);
+      await writeSessionActionFolders(sessionFilePath(sessionId, workspace), folders);
       notifyCatalogChanged(workspace);
     },
   };

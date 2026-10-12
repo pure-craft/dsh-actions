@@ -368,6 +368,8 @@ function ActionSection(props: {
   icon?: React.ReactNode;
   /** Optional caption after the title (e.g. the session visibility note, always visible). */
   tip?: string | undefined;
+  /** Compact quiet treatment used for empty session-selected directories. */
+  compactEmpty?: boolean | undefined;
   actions: ProjectActionSummary[];
   state: PanelStore['state'];
   t: Translate;
@@ -387,13 +389,13 @@ function ActionSection(props: {
 }): React.ReactElement {
   const { state, store, t } = props;
   const configPath = props.configPath;
-  return h('section', null,
+  return h('section', { className: props.compactEmpty === true ? 'dsh-actions-section dsh-actions-section-empty-folder' : 'dsh-actions-section' },
     h('div', { className: 'dsh-actions-section-head' },
       h('span', { className: 'dsh-actions-section-title' },
         props.icon !== undefined
           ? h('span', { className: 'dsh-actions-section-icon' }, props.icon)
           : null,
-        props.title,
+        h('span', { className: 'dsh-actions-section-label' }, props.title),
         props.tip !== undefined
           ? h('span', { className: 'dsh-actions-section-tip' }, props.tip)
           : null,
@@ -1002,7 +1004,7 @@ export function ActionsPanel(deps: PanelDeps): React.ReactElement {
   // T66: folder actions group per selected directory, in the order the
   // session listed them (the catalog appends folder sources after the three
   // layers and keeps the file's order inside each one).
-  const folderGroups: Array<{ folder: string; title: string; tip: string | undefined; actions: ProjectActionSummary[] }> = [];
+  const folderGroups: Array<{ folder: string; title: string; tip: string | undefined; compactEmpty: boolean; actions: ProjectActionSummary[] }> = [];
   const catalogWorkspace = catalog?.workspace ?? '';
   for (const source of catalog?.sources ?? []) {
     if (source.layer !== 'folder' || source.folder === undefined) continue;
@@ -1016,6 +1018,7 @@ export function ActionsPanel(deps: PanelDeps): React.ReactElement {
       // contributing nothing. A populated one needs no caption — the title is
       // the directory itself.
       tip: own.length > 0 ? undefined : t('folderEmptyTip'),
+      compactEmpty: own.length === 0,
       actions: own,
     });
   }
@@ -1191,6 +1194,7 @@ export function ActionsPanel(deps: PanelDeps): React.ReactElement {
           key: group.folder,
           title: group.title,
           tip: group.tip,
+          compactEmpty: group.compactEmpty,
           actions: group.actions,
           state,
           t,

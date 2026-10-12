@@ -117,6 +117,33 @@ export async function writeSessionActionFolders(
 }
 
 /**
+ * Atomically replace all plugin-owned session configuration in one write.
+ * The supported on-disk version remains authoritative when a file exists;
+ * newly created files use the current version.
+ */
+export async function configureSessionActionsFile(
+  path: string,
+  configuration: { readonly folders: readonly string[]; readonly actions: readonly ActionEntryConfig[] },
+  io: SessionFileIO = defaultIo,
+): Promise<void> {
+  const existing = await readActionsFile(path, io);
+  await writeActionsFile(
+    path,
+    {
+      version: existing?.version ?? ACTIONS_FILE_VERSION,
+      folders: [...configuration.folders],
+      actions: [...configuration.actions],
+    },
+    io,
+  );
+}
+
+/** Reset the session configuration to an empty, valid layer in one write. */
+export async function clearSessionActionsFile(path: string, io: SessionFileIO = defaultIo): Promise<void> {
+  await configureSessionActionsFile(path, { folders: [], actions: [] }, io);
+}
+
+/**
  * Remove the entry with `label` from the actions file at `path` (T50).
  * Returns false when the file or the entry does not exist. A broken file is
  * never clobbered — it throws.

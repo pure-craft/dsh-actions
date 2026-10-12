@@ -13,7 +13,11 @@ import { describe, expect, it } from 'vitest';
 import type { ActionSourceStatus, ProjectActionSummary } from '../src/contract.js';
 import { folderActionId, loadActionsCatalog } from '../src/host/catalog.js';
 import { folderActionsPath, sessionActionsPath } from '../src/host/config/paths.js';
-import { writeSessionActionFolders } from '../src/host/config/session-file.js';
+import {
+  clearSessionActionsFile,
+  configureSessionActionsFile,
+  writeSessionActionFolders,
+} from '../src/host/config/session-file.js';
 import type { SessionFileIO } from '../src/host/config/session-file.js';
 import { folderSectionTitle, makeSectionNamer, sectionKeyOf } from '../src/client/references.js';
 import type { Translate } from '../src/client/locale.js';
@@ -374,6 +378,35 @@ describe('session Action folders — the write path', () => {
 
     const written = JSON.parse(io.files[SESSION_FILE] ?? '') as Record<string, unknown>;
     expect(written).toEqual({ version: '1.0.0', actions: [], folders: ['frontend'] });
+  });
+
+  it('atomically replaces folders and actions together while preserving version', async () => {
+    const io = memoryIo({
+      [SESSION_FILE]: actionsFile({ folders: ['old'], actions: [{ label: 'old', command: 'echo old' }] }),
+    });
+
+    await configureSessionActionsFile(
+      SESSION_FILE,
+      { folders: ['frontend'], actions: [{ label: 'check', command: 'pnpm check' }] },
+      io,
+    );
+
+    expect(JSON.parse(io.files[SESSION_FILE] ?? '')).toEqual({
+      version: '1.0.0',
+      folders: ['frontend'],
+      actions: [{ label: 'check', command: 'pnpm check' }],
+    });
+    expect(Object.keys(io.files).filter((path) => path.includes('.tmp-'))).toEqual([]);
+  });
+
+  it('clears folders and actions while retaining a valid versioned session file', async () => {
+    const io = memoryIo({
+      [SESSION_FILE]: actionsFile({ folders: ['frontend'], actions: [{ label: 'check', command: 'pnpm check' }] }),
+    });
+
+    await clearSessionActionsFile(SESSION_FILE, io);
+
+    expect(JSON.parse(io.files[SESSION_FILE] ?? '')).toEqual({ version: '1.0.0', folders: [], actions: [] });
   });
 
   it('round-trips through the loader: what the writer stores is what the catalog loads', async () => {

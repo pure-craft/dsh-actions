@@ -191,7 +191,7 @@ If a session workspace is the parent directory of several Git repositories, do n
 
 Each selected directory is an independent source: when both `frontend` and `services/api` define `build`, they stay two Actions that never override each other — ids look like `folder:frontend:build` and `folder:services/api:build` — and `${workspaceFolder}` plus the default working directory point at that repository itself, so the command runs there.
 
-Host plugins that deterministically manage this dynamic selection can use the `dshActions` Service method `setSessionFolders(sessionId, workspace, folders)`. It atomically replaces the session layer's complete `folders` array, preserves existing session Actions, and immediately notifies catalog subscribers.
+Host plugins that deterministically manage the complete session configuration can use the `dshActions` Service: `configureSession(sessionId, workspace, { folders, actions })` replaces both in one atomic write, preserves the session file's `version`, and immediately refreshes the catalog; `clearSession(sessionId, workspace)` atomically clears both. The compatibility method `setSessionFolders(sessionId, workspace, folders)` still replaces only the complete `folders` array while preserving existing session Actions.
 
 Field-level detail is in the [configuration reference](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/configuration.en.md); storage and lifecycle of the session layer are in [the session layer](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/session-layer.en.md).
 
