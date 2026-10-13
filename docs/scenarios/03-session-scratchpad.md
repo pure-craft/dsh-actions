@@ -14,7 +14,7 @@
 
 ```
 你：这个诊断流程不错，记下来，这个会话里后面还要用。
-Agent：→ actions_configure({ operation: "create", layer: "session", entry: { label: "diag-slow-requests", command: "...", detail: "..." }, expectedStoreRevision: "..." })
+Agent：→ actions_configure({ operation: "create", layer: "session", definition: { label: "diag-slow-requests", command: "...", detail: "..." } })
        （注册前会先问你批准——Agent 给自己造可执行命令属高危操作）
 ```
 

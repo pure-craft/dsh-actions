@@ -16,7 +16,7 @@
 | `actions_run` | 按 id 启动任务，可带 `params`；`wait: true` 时同步阻塞到终态（60 秒封顶，超时返回当前状态）——短任务（check/test/lint）零轮询拿终态，长任务（dev/publish）省略后接 `actions_query` 跟进；返回结构化结果（见下） |
 | `actions_query` | 查看完整定义与运行输出（按 `runId` 或 `actionId`；`actionId` 形式支持字节偏移增量读取） |
 | `actions_cancel` | 取消本会话的某个运行（显式停止的唯一途径；对终态运行调用安全） |
-| `actions_configure` | 在 `global` / `workspace` / `session` 层严格创建、更新或删除 Action，使用 revision 防止覆盖并**始终要求用户批准** |
+| `actions_configure` | 在 `global` / `workspace` / `session` 层严格创建、更新或删除 Action；创建会在批准后读取当前层并拒绝同名冲突，更新/删除使用 entry revision 防止覆盖；所有写入都**始终要求用户批准** |
 
 四个工具都不接受 `workspace` 参数，始终绑定调用会话的工作区，并与该会话的 Actions 面板使用同一份 catalog。它们不能跨工作区查询、运行或配置；仅仅编辑了嵌套仓库中的文件，不会改变会话工作区。
 

@@ -106,10 +106,9 @@ function validate(entry: ActionEntryConfig): void {
   if (issues.length > 0) throw new ActionStoreError('invalid-entry', `Invalid action definition for ${entry.label}`, issues);
 }
 
-export async function createActionEntry(path: string, entry: ActionEntryConfig, expectedStoreRevision: string): Promise<void> {
+export async function createActionEntry(path: string, entry: ActionEntryConfig): Promise<void> {
   await serialized(path, async () => {
     const loaded = await readRaw(path);
-    if (revision(loaded.text) !== expectedStoreRevision) throw new ActionStoreError('stale-revision', 'Actions file changed since it was queried.');
     const actions = [...entriesOf(loaded.config)];
     if (actions.some((candidate) => candidate.label === entry.label)) throw new ActionStoreError('already-exists', `Action "${entry.label}" already exists in the target layer.`);
     validate(entry);

@@ -58,13 +58,13 @@
     {
       "id": 10,
       "prompt": "workspace 里有个 deploy 任务。这次会话我们只做 staging 验证，帮我造一个「部署到 staging」的会话专用入口，别把项目配置改了。",
-      "expected_output": "Queries the workspace deploy definition and raw session layer, then uses actions_configure to create a session-layer variant with extends pointing at the workspace action and an input default of staging; uses expectedStoreRevision and respects mandatory approval. Afterwards it runs the new action; stale revisions are queried again rather than overwritten.",
+      "expected_output": "Queries the workspace deploy definition, then uses actions_configure to create a session-layer variant with extends pointing at the workspace action and an input default of staging; relies on the tool to bind the current workspace/session and respects mandatory approval. Afterwards it runs the new action; a same-label collision is surfaced rather than overwritten.",
       "files": []
     },
     {
       "id": 11,
       "prompt": "帮我把这个临时的日志采集命令注册成会话任务：…（命令里故意用了未声明的 ${input:level} 引用）。",
-      "expected_output": "Uses actions_configure for the session layer. On invalid-entry issues such as an undeclared ${input:level}, corrects the definition by declaring the input or removing the reference, queries a fresh revision when needed, and resends rather than retrying unchanged.",
+      "expected_output": "Uses actions_configure for the session layer. On invalid-entry issues such as an undeclared ${input:level}, corrects the definition by declaring the input or removing the reference, then resends rather than retrying unchanged.",
       "files": []
     },
     {

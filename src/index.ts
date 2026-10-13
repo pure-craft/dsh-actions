@@ -154,9 +154,9 @@ export function apply(ctx: HostContext, internals: ApplyInternals = {}): void {
   };
   const actionLayers: ActionLayerStoreLike = {
     inspect: (layer, label, workspace, sessionId) => inspectActionLayer(layerPath(layer, workspace, sessionId), label),
-    create: async (layer, entry, expectedStoreRevision, workspace, sessionId) => {
+    create: async (layer, entry, workspace, sessionId) => {
       const path = layerPath(layer, workspace, sessionId);
-      await createActionEntry(path, entry, expectedStoreRevision);
+      await createActionEntry(path, entry);
       return { path };
     },
     update: async (layer, label, expectedRevision, changes, workspace, sessionId) => {

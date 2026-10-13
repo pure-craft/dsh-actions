@@ -28,15 +28,14 @@ Different normalized parameter values have different conflict signatures. Stop-a
 
 All `actions_*` tools are bound to the calling session workspace and expose the same catalog as its Actions panel. They have no `workspace` argument and cannot query, run, or configure another workspace. Editing files in a nested repository does not change the session workspace; switch to a session for that workspace, or select it as a folder source when that support is available.
 
-Use `actions_configure` only after querying the current raw layers:
+Use `actions_configure` with an explicit target layer. Folder sources cannot be configured by this tool.
 
-1. `actions_query({ selector: { kind: "action", actionId, view: "layers" } })` returns raw global/workspace/session entries plus store and entry revisions for the current session workspace.
-2. Choose an explicit target layer. Folder sources cannot be configured by this tool.
-3. Create with the raw definition and `expectedStoreRevision`; collision fails—create never upserts.
-4. Update with the layer-qualified `actionId`, `expectedRevision`, and typed changes. Update never materializes a merged definition and cannot rename a label.
-5. Delete with the layer-qualified id and `expectedRevision`. If deletion exposes a lower layer, inspect the returned fallback and retry only with `acknowledgeFallback: true` when that outcome is intended.
+1. Create with the raw definition. The tool resolves the calling workspace and session, rereads the target layer after approval, and fails on label collision—create never upserts.
+2. Before update/delete, `actions_query({ selector: { kind: "action", actionId, view: "layers" } })` returns raw global/workspace/session entries plus entry revisions for the current session workspace.
+3. Update with the layer-qualified `actionId`, `expectedRevision`, and typed changes. Update never materializes a merged definition and cannot rename a label.
+4. Delete with the layer-qualified id and `expectedRevision`. If deletion exposes a lower layer, inspect the returned fallback and retry only with `acknowledgeFallback: true` when that outcome is intended.
 
-Every write presents its raw before/after effect for user approval and is revision-bound. A stale revision must be queried again; never force a last-writer-wins update. Configuration approval does not authorize execution, and started runs keep their own definition snapshot.
+Every write presents its effect for user approval. Update and delete are revision-bound; query a stale entry revision again rather than forcing a last-writer-wins change. Configuration approval does not authorize execution, and started runs keep their own definition snapshot.
 
 ## Long-running services
 

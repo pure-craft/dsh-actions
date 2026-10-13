@@ -14,7 +14,7 @@ Have the agent register it as a **session-level Action**:
 
 ```text
 You: this diagnostic flow is good, save it, I'll need it again later in this session.
-Agent: → actions_configure({ operation: "create", layer: "session", entry: { label: "diag-slow-requests", command: "...", detail: "..." }, expectedStoreRevision: "..." })
+Agent: → actions_configure({ operation: "create", layer: "session", definition: { label: "diag-slow-requests", command: "...", detail: "..." } })
        (it asks for your approval before registering — an agent authoring an executable command
         for itself is high-risk by definition)
 ```

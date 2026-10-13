@@ -16,7 +16,7 @@ When a new session starts, the plugin injects concise summaries of the Actions a
 | `actions_run` | starts a task by id, optionally with `params`; with `wait: true` it blocks synchronously until a terminal state (capped at 60s, returning the current state on timeout) — short tasks (check/test/lint) get a terminal state with zero polling, long ones (dev/publish) omit it and follow up with `actions_query`; returns a structured result (below) |
 | `actions_query` | reads the full definition and run output (by `runId` or `actionId`; the `actionId` form supports byte-offset incremental reads) |
 | `actions_cancel` | cancels a run in this session (the only way to stop something explicitly; safe to call on a run already in a terminal state) |
-| `actions_configure` | strictly creates, updates, or deletes Actions in the `global`, `workspace`, or `session` layer, using revisions to prevent overwrites and **always requiring user approval** |
+| `actions_configure` | strictly creates, updates, or deletes Actions in the `global`, `workspace`, or `session` layer; create rereads the current layer after approval and rejects label collisions, while update/delete use entry revisions to prevent overwrites; every write **always requires user approval** |
 
 None of the four tools accepts a `workspace` argument. They are always bound to the calling session's workspace and use the same catalog as that session's Actions panel. They cannot query, run, or configure another workspace; merely editing files in a nested repository does not change the session workspace.
 
