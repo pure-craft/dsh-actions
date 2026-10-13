@@ -2,6 +2,7 @@ export { ActionToolError, createActionToolDefinitions, registerActionTools } fro
 export type {
   ActionCatalogProvider,
   ActionToolErrorCode,
+  ActionLayerStoreLike,
   ActionToolsDeps,
   ApprovalOutcomeLike,
   ApprovalServiceLike,

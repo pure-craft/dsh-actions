@@ -6,7 +6,7 @@
 
 ## The pain
 
-Debugging always produces commands that "only make sense in this session": an Action's parameters pinned to the values this task needs, a diagnostic command thrown together on the spot, a multi-step flow the agent just figured out. Pinning them into `actions.json` is not worth it (this is session context, not project definition), but retyping them every time is a chore.
+Debugging always produces commands that "only make sense in this session": a fixed-parameter variant for the current task, a diagnostic command thrown together on the spot, or a multi-step flow the agent just figured out. Putting them in the repository's `actions.json` is not worth it (this is session context, not project definition), but retyping them every time is a chore.
 
 ## How
 
@@ -14,7 +14,7 @@ Have the agent register it as a **session-level Action**:
 
 ```text
 You: this diagnostic flow is good, save it, I'll need it again later in this session.
-Agent: → actions_register({ label: "diag-slow-requests", command: "...", detail: "..." })
+Agent: → actions_configure({ operation: "create", layer: "session", entry: { label: "diag-slow-requests", command: "...", detail: "..." }, expectedStoreRevision: "..." })
        (it asks for your approval before registering — an agent authoring an executable command
         for itself is high-risk by definition)
 ```

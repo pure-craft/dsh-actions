@@ -6,7 +6,7 @@
 
 ## 痛点
 
-调试中总有一些"只在这个会话里有意义"的命令：把某个 Action 的参数钉死成当前需求的取值、一条临时拼出来的诊断命令、Agent 刚摸索出来的多步流程。固化进 `actions.json` 不值得（是会话语境，不是项目定义），但每次重敲又繁琐。
+调试中总有一些“只在这个会话里有意义”的命令：为当前需求派生的固定参数变体、一条临时拼出来的诊断命令、Agent 刚摸索出来的多步流程。写进仓库的 `actions.json` 不值得（是会话语境，不是项目定义），但每次重敲又繁琐。
 
 ## 做法
 
@@ -14,7 +14,7 @@
 
 ```
 你：这个诊断流程不错，记下来，这个会话里后面还要用。
-Agent：→ actions_register({ label: "diag-slow-requests", command: "...", detail: "..." })
+Agent：→ actions_configure({ operation: "create", layer: "session", entry: { label: "diag-slow-requests", command: "...", detail: "..." }, expectedStoreRevision: "..." })
        （注册前会先问你批准——Agent 给自己造可执行命令属高危操作）
 ```
 

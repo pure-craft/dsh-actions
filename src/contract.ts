@@ -61,7 +61,7 @@ export interface ActionRunOptionsConfig {
  * - `append`: like `dedicated`, but the new output is appended below the
  *   previous runs' output with a boundary line (the VS Code `shared` terminal
  *   experience). Presentation-only: runs keep separate ids and outputs
- *   internally; `actions_inspect` is unaffected.
+ *   internally; `actions_query` continues to inspect each run independently.
  */
 export type ActionPanelMode = 'new' | 'dedicated' | 'append';
 
@@ -195,7 +195,7 @@ export interface ProjectActionSummary {
 
 /**
  * Agent-facing projection of an action (T64). Every Agent-bound surface
- * (actions_list/run/inspect outputs, composer reference serialization)
+ * (actions_query/run/inspect outputs, composer reference serialization)
  * consumes ONLY this type: human-only fields (e.g. `icon`) stay out of the
  * Pick, so they structurally cannot leak. Widening the Pick is an
  * intentional, review-visible decision.
@@ -246,12 +246,6 @@ export interface ActionsCatalog {
   sources: ActionSourceStatus[];
   actions: ProjectActionSummary[];
   runs: ActionRunSummary[];
-  /**
-   * Session-pinned input values of the requesting session (T38):
-   * actionId -> values. Present only when the request identifies a
-   * resolvable session; other sessions' pins are never exposed.
-   */
-  sessionParams?: Record<string, Record<string, string>>;
 }
 
 // ---------------------------------------------------------------------------

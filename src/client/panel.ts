@@ -5,13 +5,11 @@
 import * as React from 'react';
 import {
   Button,
-  Checkbox,
   IconCheckOutlineRegular,
   IconChevronDownOutlineRegular,
   IconChevronUpOutlineRegular,
   IconEditOutlineRegular,
   IconPlayOutlineRegular,
-  IconQuestionOutlineRegular,
   IconCloseOutlineRegular,
   IconNewChatOutlineRegular,
   IconRefreshOutlineRegular,
@@ -297,13 +295,12 @@ function ActionRow(props: RowProps): React.ReactElement {
   const { action, runs, selected, t } = props;
   const activeRuns = runs.filter((view) => !isTerminalStatus(view.run.status));
   const activeLatest = activeRuns[0];
-  // T54: the dot is an active-only signal — clickable to focus the run tab;
-  // terminal runs keep an inert idle dot so rows stay aligned.
+  // T54: only active runs need a status signal; idle rows start directly with
+  // the Action icon instead of reserving space for a meaningless grey dot.
   const badges = buildActionBadges(action, t);
   return h('div', { className: 'dsh-actions-row', 'data-selected': selected ? 'true' : 'false' },
     // S6: the active dot is a real sibling button of the row's main button
-    // (interactive content must not nest inside a <button>); the idle dot is
-    // an inert sibling so rows stay aligned.
+    // (interactive content must not nest inside a <button>).
     activeLatest !== undefined
       ? h('button', {
           type: 'button',
@@ -312,8 +309,7 @@ function ActionRow(props: RowProps): React.ReactElement {
           'aria-label': t('focusRun'),
           onClick: () => { props.store.focusRunTab(activeLatest.run.id); },
         }, h(StateDot, { state: 'ongoing', size: 10 }))
-      : h('span', { className: 'dsh-actions-row-dot dsh-actions-row-dot-idle', 'aria-hidden': true },
-          h(StateDot, { state: 'idle', size: 10 })),
+      : null,
     h('button', {
       type: 'button',
       className: 'dsh-actions-row-main',
@@ -628,44 +624,16 @@ function ParamField(props: {
 
 function ParamForm(props: {
   action: ProjectActionSummary;
-  form: { values: Record<string, string>; error: string | null; pin: boolean };
-  /** This session's pinned values for the action (undefined when unpinned). */
-  pinned: Record<string, string> | undefined;
+  form: { values: Record<string, string>; error: string | null };
   store: PanelStore;
   t: Translate;
 }): React.ReactElement {
-  const { action, form, pinned, store, t } = props;
-  const pinnedCount = pinned === undefined ? 0 : Object.keys(pinned).length;
+  const { action, form, store, t } = props;
   const inputs = action.inputs ?? [];
   // Initial focus: first required field, else the first field.
   const requiredIndex = inputs.findIndex((input) => input.required === true);
   const focusIndex = requiredIndex >= 0 ? requiredIndex : 0;
   const footer = h('div', { className: 'dsh-actions-params-footer' },
-    h('div', { className: 'dsh-actions-param-pin' },
-      h(Checkbox, {
-        checked: form.pin,
-        label: t('paramPin'),
-        onChange: (next) => { store.updateParamPin(next); },
-      }),
-      h(Tooltip, {
-        label: t('paramPinTooltip'),
-        side: 'top',
-        children: tooltipWrap(
-          h('span', { className: 'dsh-actions-param-pin-tip', role: 'img', 'aria-label': t('paramPinTooltip') },
-            h(IconQuestionOutlineRegular, { size: 14 })),
-        ),
-      }),
-      pinnedCount > 0
-        ? h(React.Fragment, null,
-            h('span', { className: 'dsh-actions-param-pinned' }, t('paramPinned', { count: pinnedCount })),
-            h(Button, {
-              variant: 'ghost',
-              size: 'sm',
-              onClick: () => { void store.unpinParams(action.id); },
-            }, t('paramUnpin')),
-          )
-        : null,
-    ),
     h('div', { className: 'dsh-actions-params-actions' },
       h(Button, { variant: 'ghost', size: 'sm', onClick: () => { store.dismissParamForm(); } }, t('confirmCancel')),
       h(Button, {
@@ -1124,12 +1092,12 @@ export function ActionsPanel(deps: PanelDeps): React.ReactElement {
         : null,
       state.pendingParams !== null
         ? (() => {
-            const form = state.pendingParams as { actionId: string; values: Record<string, string>; error: string | null; pin: boolean };
+            const form = state.pendingParams as { actionId: string; values: Record<string, string>; error: string | null };
             const target = actions.find((action) => action.id === form.actionId);
             // The form is a body-portaled Modal — no scroll-into-view needed.
             return target === undefined
               ? null
-              : h(ParamForm, { action: target, form, pinned: store.sessionParamsOf(form.actionId), store, t });
+              : h(ParamForm, { action: target, form, store, t });
           })()
         : null,
       state.deleteConfirm !== null

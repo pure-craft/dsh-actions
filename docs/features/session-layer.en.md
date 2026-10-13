@@ -45,12 +45,12 @@ Because the definitions stay in the repositories, the panel offers no delete ent
 
 ## Write path: who writes the session layer
 
-- **An agent writes Action definitions** through `actions_register` (see below).
-- **Configuring the complete session layer**: a host plugin calls `dshActions.configureSession(sessionId, workspace, { folders, actions })` to replace the directory selection and session Actions in one atomic write, preserve the file `version`, and refresh the catalog after success; `clearSession(sessionId, workspace)` atomically clears both. The compatibility method `setSessionFolders(sessionId, workspace, folders)` still changes only `folders` while preserving Actions. Editing the session layer's `actions.json` directly works too (the session section's edit button in the panel opens exactly that file, once it exists). There is **no** folder-picker UI and **no** agent tool today: the selection belongs to the user or the host plugin, and agents only consume it (`actions_list` carries the caller's session, so a selected directory's Actions show up).
+- **An agent writes Action definitions** through `actions_configure` (see below).
+- **Configuring the complete session layer**: a host plugin calls `dshActions.configureSession(sessionId, workspace, { folders, actions })` to replace the directory selection and session Actions in one atomic write, preserve the file `version`, and refresh the catalog after success; `clearSession(sessionId, workspace)` atomically clears both. The compatibility method `setSessionFolders(sessionId, workspace, folders)` still changes only `folders` while preserving Actions. Editing the session layer's `actions.json` directly works too (the session section's edit button in the panel opens exactly that file, once it exists). There is **no** folder-picker UI and **no** agent tool today: the selection belongs to the user or the host plugin, and agents only consume it (`actions_query` carries the caller's session, so a selected directory's Actions show up).
 
-## Write path: `actions_register`
+## Write path: `actions_configure`
 
-The agent writes new tasks into the session layer through `actions_register`, and **registration always requires user approval** (an agent authoring an executable command for itself is high-risk by definition). Two granularities are supported:
+The agent writes new tasks into the session layer through `actions_configure`, and **registration always requires user approval** (an agent authoring an executable command for itself is high-risk by definition). Two granularities are supported:
 
 - a standalone command: a complete new task definition;
 - a variant: `extends: "<layer>:<label>"` inherits an existing task's definition (cwd/env/inputs/runOptions and so on), with `params` pinning one setting — for example deriving a session-only "deploy to staging" variant from `workspace:deploy`.
@@ -60,5 +60,5 @@ The agent writes new tasks into the session layer through `actions_register`, an
 ## Lifecycle and promotion
 
 - The session layer file lives and dies with the session directory; different sessions cannot see each other's.
-- Session **parameter pins** (`actions_set_params`) are a different thing: purely in-memory, dying with the session — do not confuse the two: the session layer stores task definitions, the pinboard stores parameter values.
+- Run parameters come only from explicit values for that run and the Action's declared `default`; there is no session parameter memory or hidden parameter source.
 - Session tasks that prove themselves should be promoted to a file layer: the panel's session section offers a review and "promote" entry (review-and-persist); once a person confirms, it is written into the workspace/global config and goes through the normal git review.

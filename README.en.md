@@ -39,7 +39,7 @@ High-risk tasks get something VS Code Tasks has no equivalent for: an **approval
 
 The single source of configuration is a standalone `actions.json` (JSONC). There is no runtime importer or bridge for other task formats, and none planned.
 
-> **Status**: proactive discovery on the agent side is still weak. The task list does not enter the agent's context on its own; the agent has to call `actions_list` before it knows what exists. Triggering a run straight from the composer and splicing the result back into the conversation is not built either. So today it is this: **smooth when you reference a task, not yet there when it comes to finding and calling one unprompted.** Making agents discover and use these tasks more proactively is the main thing next.
+> **Status**: when a new session starts, concise summaries of callable Actions and the roles of the four `actions_*` tools automatically enter runtime context; full commands, parameter details, and run output remain progressively disclosed through `actions_query`. What is still missing is triggering a run directly from the composer and splicing the result back into the conversation.
 
 ## Contents
 
@@ -125,7 +125,7 @@ Write `.dsh/actions.json` at the workspace root:
 }
 ```
 
-That `detail` line is not optional decoration: it shows up in the panel and in `actions_list` output alike, and **it is what the agent matches on when deciding whether this is the task it wants.**
+That `detail` line is not optional decoration: it shows up in the panel and in `actions_query` output alike, and **it is what the agent matches on when deciding whether this is the task it wants.**
 
 Open the **Actions** card on the right sidebar's Start page, click the run button next to `check`, and the output streams into the run tab workspace below. That is the whole loop: write config → click in the panel → watch output. Saving the file takes effect immediately, no refresh needed.
 
@@ -136,9 +136,9 @@ The same `actions.json` is two different things to a person and to an agent, ove
 | | How it is discovered | How it is used |
 | --- | --- | --- |
 | **Person** | the Actions panel in the right sidebar | one click; a form for parameterized tasks; output streams visibly |
-| **Agent** | `actions_list` | calls `actions_run`, gets a structured result |
+| **Agent** | `actions_query` | calls `actions_run`, gets a structured result |
 
-The agent side is six tools: `actions_list` / `actions_run` / `actions_inspect` / `actions_cancel` / `actions_set_params` / `actions_register`. For their semantics and the trade-offs behind them, see [Agent integration](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/agent-integration.en.md). One of them, `actions_register`, registers a flow the agent discovered in-session as a session-layer task, and **it always requires your approval** — an agent authoring an executable command for itself is high-risk by definition.
+The agent side is four tools: `actions_query` / `actions_run` / `actions_cancel` / `actions_configure`. For their semantics and the trade-offs behind them, see [Agent integration](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/agent-integration.en.md). One of them, `actions_configure`, registers a flow the agent discovered in-session as a session-layer task, and **it always requires your approval** — an agent authoring an executable command for itself is high-risk by definition.
 
 The package also ships a `dsh-actions-authoring` skill: when you ask an agent to write an `actions.json`, it gets the full field reference and curation guidance on its own, so you do not have to hand it docs.
 
@@ -172,7 +172,7 @@ session layer (agent pins it down)  ──promote──▶  workspace layer (tea
 ```
 
 - **Merge, not isolation**: a workspace can change a single field of a global task of the same name (override `command` to add an argument, or add a `detail`) and inherit the rest.
-- **The session layer is written by the agent**: `actions_register` always requires your approval; the ones you like, you promote to a file layer and they become long-term assets.
+- **The session layer is written by the agent**: `actions_configure` always requires your approval; the ones you like, you promote to a file layer and they become long-term assets.
 - **One panel for people**: all three layers appear in the same list, grouped; they run identically — the layer is metadata, not a barrier.
 
 ### One workspace containing multiple repositories

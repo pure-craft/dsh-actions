@@ -101,7 +101,6 @@ export function actionLexicon(actions: readonly ProjectActionSummary[]): string[
  */
 export function serializeActionRef(
   actions: readonly AgentActionView[],
-  sessionParams: Record<string, Record<string, string>> | undefined,
   ref: string,
 ): string {
   const action = actions.find((candidate) => candidate.id === ref);
@@ -110,7 +109,7 @@ export function serializeActionRef(
   }
   // Model form is an operational brief, not a command dump: tell the agent
   // to use the action and hand it everything needed to run WITHOUT errors —
-  // the command text itself is available via actions_inspect when needed.
+  // the command text itself is available via actions_query when needed.
   const required = (action.inputs ?? []).filter((input) => input.required === true);
   const optional = (action.inputs ?? []).filter((input) => input.required !== true);
   const parts: string[] = [];
@@ -119,10 +118,6 @@ export function serializeActionRef(
       input.options !== undefined ? `${input.id}（${input.options.join('/')}）` : input.id).join('、')}`);
   }
   if (optional.length > 0) parts.push(`可选：${optional.map((input) => input.id).join('、')}`);
-  const pinned = sessionParams?.[action.id];
-  if (pinned !== undefined && Object.keys(pinned).length > 0) {
-    parts.push(`已记住参数：${Object.entries(pinned).map(([key, value]) => `${key}=${value}`).join('，')}`);
-  }
   // A manual-only action cannot be run by the agent at all — say so explicitly
   // instead of letting it attempt actions_run on something it cannot see.
   const note = action.visibility === 'ui'
@@ -233,9 +228,9 @@ export function createActionsTriggerSource(deps: {
         if (catalog === null) {
           const cached = actionsOf();
           if (!cached.some((action) => action.id === ref)) return `使用 Action（id: ${ref}）。`;
-          return serializeActionRef(cached, undefined, ref);
+          return serializeActionRef(cached, ref);
         }
-        return serializeActionRef(catalog.actions, catalog.sessionParams, ref);
+        return serializeActionRef(catalog.actions, ref);
       },
     },
   };

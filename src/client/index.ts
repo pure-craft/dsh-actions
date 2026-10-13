@@ -12,10 +12,9 @@ import { ACTIONS_CSS } from './styles.js';
 import type { UseSessionsLike } from './sessions.js';
 import {
   ActionsCancelView,
-  ActionsInspectView,
-  ActionsListView,
+  ActionsConfigureView,
+  ActionsQueryView,
   ActionsRunView,
-  ActionsSetParamsView,
 } from './toolview.js';
 
 /** Entry id within the conversation.view tab strip (after chat 0 / trajectory 10). */
@@ -237,10 +236,9 @@ export function apply(ctx: SlotContext): void {
   // generic "工具调用" row with our structured rendering (see toolview.ts).
   const toolviews: Array<readonly [string, unknown]> = [
     ['actions_run', ActionsRunView],
-    ['actions_inspect', ActionsInspectView],
-    ['actions_list', ActionsListView],
+    ['actions_query', ActionsQueryView],
     ['actions_cancel', ActionsCancelView],
-    ['actions_set_params', ActionsSetParamsView],
+    ['actions_configure', ActionsConfigureView],
   ];
   for (const [key, component] of toolviews) {
     ctx.slots.inject('tool.call.toolview', () => ctx.slots.register({

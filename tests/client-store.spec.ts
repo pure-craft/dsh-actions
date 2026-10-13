@@ -329,18 +329,6 @@ class FakeApi implements ActionsApi {
     this.emit(sessionId, frame);
   }
 
-  /** Session pin board (T38/T39): sessionId -> actionId -> pinned values. */
-  private readonly pinBoards = new Map<string, Map<string, Record<string, string>>>();
-
-  private pinsOf(sessionId: string): Map<string, Record<string, string>> {
-    let board = this.pinBoards.get(sessionId);
-    if (board === undefined) {
-      board = new Map();
-      this.pinBoards.set(sessionId, board);
-    }
-    return board;
-  }
-
   /** Actions deleted through the endpoint (T51), removed from later catalogs. */
   private readonly deletedActions = new Set<string>();
 
@@ -355,10 +343,7 @@ class FakeApi implements ActionsApi {
     const visible = this.deletedActions.size === 0
       ? catalog
       : { ...catalog, actions: catalog.actions.filter((action) => !this.deletedActions.has(`${sessionId}:${action.id}`)) };
-    const board = this.pinBoards.get(sessionId);
-    return board === undefined || board.size === 0
-      ? visible
-      : { ...visible, sessionParams: Object.fromEntries([...board.entries()].map(([key, value]) => [key, { ...value }])) };
+    return visible;
   }
 
   deleteAction(sessionId: string, actionId: string): Promise<void> {
@@ -370,23 +355,6 @@ class FakeApi implements ActionsApi {
       listener({ type: 'catalog', catalog });
     }
     return Promise.resolve();
-  }
-
-  saveSessionParams(
-    sessionId: string,
-    actionId: string,
-    values: Record<string, string> | undefined,
-  ): Promise<Record<string, string>> {
-    this.calls.push(values === undefined ? `unpin:${sessionId}:${actionId}` : `pin:${sessionId}:${actionId}`);
-    const board = this.pinsOf(sessionId);
-    if (values === undefined || Object.keys(values).length === 0) board.delete(actionId);
-    else board.set(actionId, { ...values });
-    // The Host republishes catalog frames after a pin write.
-    const catalog = this.catalogFor(sessionId);
-    for (const listener of this.catalogListeners.get(sessionId) ?? []) {
-      listener({ type: 'catalog', catalog });
-    }
-    return Promise.resolve(values === undefined ? {} : { ...values });
   }
 
   listCatalog(sessionId: string): Promise<ActionsCatalog> {
@@ -1066,13 +1034,12 @@ describe('PanelStore parameter form (T34)', () => {
       actionId: 'build',
       values: { target: 'all', mode: 'dev' },
       error: null,
-      pin: false,
     });
     expect(api.calls).not.toContain('run:s1:build');
     store.dispose();
   });
 
-  it('submitting passes params through; unpinned values fall back to defaults', { timeout: 15000 }, async () => {
+  it('submitting passes explicit params through and omitted values use defaults', { timeout: 15000 }, async () => {
     const api = new FakeApi({ s1: '/ws/a' });
     const store = new PanelStore(api);
     await bind(store, 's1');
@@ -1087,7 +1054,7 @@ describe('PanelStore parameter form (T34)', () => {
     expect(api.paramsCalls[api.paramsCalls.length - 1]).toEqual({ target: 'web', mode: 'dev' });
     expect(store.state.pendingParams).toBeNull();
 
-    // T39: without a pin there is no client-side memory — defaults return.
+    // There is no client-side parameter memory — defaults return.
     const runId = store.state.latestRunByAction.build as string;
     await store.cancelRun(runId);
     store.requestRun('build');
@@ -1167,100 +1134,34 @@ describe('PanelStore parameter form (T34)', () => {
   });
 });
 
-describe('PanelStore session parameter pins (T39)', () => {
-  const PIN_INPUTS: ActionInputConfig[] = [
+describe('PanelStore parameter prefill', () => {
+  const INPUTS: ActionInputConfig[] = [
     { id: 'target', type: 'string', required: true, default: 'all' },
     { id: 'mode', type: 'select', options: ['dev', 'prod'], default: 'dev' },
   ];
 
-  const catalogWithInputsAndPins = (api: FakeApi, pins: Record<string, Record<string, string>>): ActionsCatalog => ({
-    apiVersion: 1,
-    workspace: '/ws/a',
-    sources: [],
-    actions: [api.actionFor('s1', 'build', PIN_INPUTS)],
-    runs: [],
-    sessionParams: pins,
-  });
-
-  it('prefills from the session pin board ahead of defaults (run params still win)', { timeout: 15000 }, async () => {
-    // Pure helper, three levels: prefill > session pins > default.
-    expect(resolveParamValues(PIN_INPUTS, { target: 'docs' }, { target: 'web', mode: 'prod' }))
-      .toEqual({ target: 'docs', mode: 'prod' });
-    expect(resolveParamValues(PIN_INPUTS, undefined, { target: 'web', mode: 'prod' }))
-      .toEqual({ target: 'web', mode: 'prod' });
+  it('uses explicit rerun params before declared defaults', { timeout: 15000 }, async () => {
+    expect(resolveParamValues(INPUTS, { target: 'docs' }))
+      .toEqual({ target: 'docs', mode: 'dev' });
+    expect(resolveParamValues(INPUTS))
+      .toEqual({ target: 'all', mode: 'dev' });
 
     const api = new FakeApi({ s1: '/ws/a' });
     const store = new PanelStore(api);
     await bind(store, 's1');
-    api.pushCatalogFrame('s1', catalogWithInputsAndPins(api, { build: { target: 'web', mode: 'prod' } }));
+    api.pushCatalogFrame('s1', {
+      apiVersion: 1,
+      workspace: '/ws/a',
+      sources: [],
+      actions: [api.actionFor('s1', 'build', INPUTS)],
+      runs: [],
+    });
     await sleep(30);
 
     store.requestRun('build');
-    expect(store.state.pendingParams?.values).toEqual({ target: 'web', mode: 'prod' });
-
-    // A rerun prefill (the run's own params) still outranks the pin board.
-    store.requestRun('build', { target: 'docs' });
+    expect(store.state.pendingParams?.values).toEqual({ target: 'all', mode: 'dev' });
+    store.requestRun('build', { target: 'docs', mode: 'prod' });
     expect(store.state.pendingParams?.values).toEqual({ target: 'docs', mode: 'prod' });
-    store.dispose();
-  });
-
-  it('pinning on submit writes the session params and prefills from them afterwards', { timeout: 15000 }, async () => {
-    const api = new FakeApi({ s1: '/ws/a' });
-    const store = new PanelStore(api);
-    await bind(store, 's1');
-    api.pushCatalogFrame('s1', catalogWithInputsAndPins(api, {}));
-    await sleep(30);
-
-    store.requestRun('build');
-    store.updateParamValue('target', 'web');
-    store.updateParamPin(true);
-    await store.submitParamForm();
-    await sleep(50);
-
-    expect(api.calls).toContain('pin:s1:build');
-    expect(store.sessionParamsOf('build')).toEqual({ target: 'web', mode: 'dev' });
-
-    const runId = store.state.latestRunByAction.build as string;
-    await store.cancelRun(runId);
-    store.requestRun('build');
-    expect(store.state.pendingParams?.values.target).toBe('web');
-    store.dispose();
-  });
-
-  it('unpinning clears the board via the params endpoint', { timeout: 15000 }, async () => {
-    const api = new FakeApi({ s1: '/ws/a' });
-    const store = new PanelStore(api);
-    await bind(store, 's1');
-    api.pushCatalogFrame('s1', catalogWithInputsAndPins(api, { build: { target: 'web' } }));
-    await sleep(30);
-    expect(store.sessionParamsOf('build')).toEqual({ target: 'web' });
-
-    await store.unpinParams('build');
-    await sleep(30);
-
-    expect(api.calls).toContain('unpin:s1:build');
-    expect(store.sessionParamsOf('build')).toBeUndefined();
-
-    store.requestRun('build');
-    expect(store.state.pendingParams?.values.target).toBe('all');
-    store.dispose();
-  });
-
-  it('catalog frames update the pin board used for prefill', { timeout: 15000 }, async () => {
-    const api = new FakeApi({ s1: '/ws/a' });
-    const store = new PanelStore(api);
-    await bind(store, 's1');
-    api.pushCatalogFrame('s1', catalogWithInputsAndPins(api, {}));
-    await sleep(30);
-
-    api.pushCatalogFrame('s1', catalogWithInputsAndPins(api, { build: { target: 'docs', mode: 'prod' } }));
-    await sleep(30);
-
-    expect(store.sessionParamsOf('build')).toEqual({ target: 'docs', mode: 'prod' });
-    store.requestRun('build');
-    // The required input is satisfied by the session layer — the form is complete.
-    expect(store.state.pendingParams?.values).toEqual({ target: 'docs', mode: 'prod' });
-    expect(Object.values(store.state.pendingParams?.values ?? {}).every((value) => value !== '')).toBe(true);
     store.dispose();
   });
 });
@@ -1671,25 +1572,23 @@ describe('composer @ reference source (T53)', () => {
         inputs: [{ id: 'target', type: 'string' }],
       }),
     ];
-    const pins = { 'workspace:build': { target: 'web' } };
-
-    expect(serializeActionRef(actions, pins, 'workspace:build'))
-      .toBe('使用 Action「build」（id: workspace:build）。可选：target；已记住参数：target=web。');
+    expect(serializeActionRef(actions, 'workspace:build'))
+      .toBe('使用 Action「build」（id: workspace:build）。可选：target。');
   });
 
-  it('serializes a minimal action without inputs or pins, and degrades unknown refs', () => {
+  it('serializes a minimal action and degrades unknown refs', () => {
     const actions = [action('global:doctor', 'doctor', 'global')];
 
-    expect(serializeActionRef(actions, undefined, 'global:doctor'))
+    expect(serializeActionRef(actions, 'global:doctor'))
       .toBe('使用 Action「doctor」（id: global:doctor）。');
-    expect(serializeActionRef(actions, undefined, 'ghost'))
+    expect(serializeActionRef(actions, 'ghost'))
       .toBe('Action ghost（该任务已不在当前目录中）');
   });
 
   it('warns the agent when the referenced action is manual-only', () => {
     const actions = [action('workspace:deploy', 'deploy', 'workspace', { visibility: 'ui' })];
 
-    const text = serializeActionRef(actions, undefined, 'workspace:deploy');
+    const text = serializeActionRef(actions, 'workspace:deploy');
     expect(text).toContain('仅人工可见');
     expect(text).toContain('你无法运行它');
   });

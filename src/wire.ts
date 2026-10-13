@@ -156,7 +156,7 @@ export interface EntryIssue {
 /**
  * Non-throwing entry validation (T63b): every zod issue mapped to
  * `{path, message}` (entry-relative paths). Consumers that need ALL issues at
- * once (e.g. actions_register's self-correcting invalid-entry result) use
+ * once (e.g. actions_configure's self-correcting invalid-entry result) use
  * this; the throwing parser below stays the file-loading gate.
  */
 export function validateActionEntryConfig(value: unknown): EntryIssue[] {
@@ -255,12 +255,6 @@ export function parseActionsCatalog(value: unknown): ActionsCatalog {
   }
   if (!Array.isArray(value.sources) || !Array.isArray(value.actions) || !Array.isArray(value.runs)) {
     throw new TypeError('Invalid DSH Actions catalog collections');
-  }
-  if (
-    value.sessionParams !== undefined &&
-    (!isRecord(value.sessionParams) || !Object.values(value.sessionParams).every((entry) => isStringRecord(entry)))
-  ) {
-    throw new TypeError('Invalid DSH Actions catalog sessionParams');
   }
   for (const source of value.sources) parseActionSourceStatus(source);
   for (const action of value.actions) parseProjectActionSummary(action);

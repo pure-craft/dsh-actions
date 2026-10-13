@@ -44,11 +44,9 @@ export const ACTIONS_CSS = `
 .dsh-actions-row-label { font-size: 14px; line-height: 20px; color: var(--dsw-alias-label-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dsh-actions-row-detail { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; line-height: 20px; color: var(--dsw-alias-label-tertiary); }
 /* T54: command tail in mono tertiary; badges are quiet hairline capsules */
-/* S6: the active dot is a real sibling <button> — reset its chrome; the idle dot is an inert aligned span. */
+/* S6: an active run dot is a real sibling <button> — reset its chrome. */
 .dsh-actions-row-dot { display: inline-flex; flex: none; cursor: pointer; padding: 2px; border: none; background: none; color: inherit; font: inherit; border-radius: 4px; }
 .dsh-actions-row-dot:hover { background: var(--dsw-alias-interactive-bg-hover); }
-.dsh-actions-row-dot-idle { cursor: default; }
-.dsh-actions-row-dot-idle:hover { background: none; }
 .dsh-actions-badge { display: inline-flex; align-items: center; gap: 3px; flex: none; padding: 0 6px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 999px; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-tertiary); white-space: nowrap; }
 .dsh-actions-badge-warn { color: var(--dsw-alias-state-warn-label); border-color: var(--dsw-alias-state-warn-tertiary); }
 .dsh-actions-row-side { display: flex; align-items: center; gap: 6px; flex: none; }
@@ -113,8 +111,7 @@ export const ACTIONS_CSS = `
 body.dsh-actions-run-confirmation-open [role='dialog'] { width: min(760px, calc(100vw - 48px)); max-width: 760px; }
 body.dsh-actions-run-confirmation-open [role='dialog'] p { white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
 
-/* Parameter form (T34, Modal-based): fields stack inside the dialog body; the
-   pin row sits left of the footer actions. */
+/* Parameter form (T34, Modal-based): fields stack inside the dialog body. */
 .dsh-actions-param-field { display: flex; flex-direction: column; gap: 4px; }
 .dsh-actions-param-field + .dsh-actions-param-field { margin-top: 10px; }
 .dsh-actions-param-label { font-size: 12px; font-weight: 500; line-height: 18px; color: var(--dsw-alias-label-primary); }
@@ -123,8 +120,6 @@ body.dsh-actions-run-confirmation-open [role='dialog'] p { white-space: pre-wrap
 .dsh-actions-param-error { font-size: 12px; line-height: 18px; color: var(--dsw-alias-state-error-primary); margin-top: 8px; }
 .dsh-actions-params-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; flex-wrap: wrap; }
 .dsh-actions-params-actions { display: flex; align-items: center; gap: 8px; flex: none; margin-left: auto; }
-.dsh-actions-param-pin { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.dsh-actions-param-pin-tip { display: inline-flex; color: var(--dsw-alias-label-caption); cursor: help; }
 
 /* Composer dock pill: never wrap (the stats strip squeezes it) */
 .dsh-actions-dock-pill { white-space: nowrap; }
@@ -143,7 +138,6 @@ body.dsh-actions-run-confirmation-open [role='dialog'] p { white-space: pre-wrap
 .dsh-actions-page[data-dsh-surface='sidebar-right'] .dsh-actions-content { max-width: none; gap: 12px; }
 .dsh-actions-page[data-dsh-surface='sidebar-right'] .dsh-actions-header h1 { font-size: 15px; line-height: 22px; }
 .dsh-actions-page[data-dsh-surface='sidebar-right'] .dsh-actions-header p { font-size: 12px; line-height: 18px; }
-.dsh-actions-param-pinned { font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-tertiary); }
 
 /* Empty / error states */
 .dsh-actions-empty { min-height: 120px; display: grid; place-items: center; gap: 4px; color: var(--dsw-alias-label-secondary); border: 1px dashed var(--dsw-alias-border-l1); border-radius: 10px; font-size: 13px; line-height: 20px; padding: 16px; text-align: center; }

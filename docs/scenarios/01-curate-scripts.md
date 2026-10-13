@@ -19,7 +19,7 @@
 
 ## 收益
 
-- **统一入口**：同一份清单出现在面板（人一键运行）和 Agent 工具（`actions_list` 可发现、可调用）两侧；
+- **统一入口**：同一份清单出现在面板（人一键运行）和 Agent 工具（`actions_query` 可发现、可调用）两侧；
 - **可策展**：趁机补上 `detail` 描述、给排他任务标 `runOptions.instancePolicy: "reject"`、给高危任务标 `approval`——原格式里表达不了的行为约束，在 `actions.json` 里都有位置；
 - **可演进**：定义跟随仓库，评审走正常 git 流程，Agent 后续还能继续改进它。
 

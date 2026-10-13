@@ -55,7 +55,7 @@ function makeFixture(): Fixture {
   const connection = new RecordingConnection();
   const skills = new RecordingSkills();
   const disposers: Array<() => void> = [];
-  const services: Record<string, unknown> = { tools, connection, skills };
+  const services: Record<string, unknown> = { tools, connection, skills, systemPrompt: { context: () => () => {} } };
   const ctx: HostContext = {
     get: (key) => services[key],
     provide: (key, value) => {
@@ -66,6 +66,7 @@ function makeFixture(): Fixture {
       const dispose = factory();
       if (typeof dispose === 'function') disposers.push(dispose);
     },
+    on: () => () => {},
   };
   return { ctx, tools, connection, skills, disposers };
 }
@@ -76,7 +77,7 @@ describe('bundle composition', () => {
     // web connection channel exist; both `ctx.get` lookups then return
     // undefined and the bundle silently registers nothing. See docs/mvp.md.
     expect(name).toBe('dsh-actions');
-    expect(inject).toEqual(['tools', 'connection', 'agents', 'skills', 'approval']);
+    expect(inject).toEqual(['tools', 'connection', 'agents', 'skills', 'approval', 'systemPrompt']);
   });
 
   it('registers the agent tools, every API route, and the authoring skill', async () => {
@@ -96,7 +97,7 @@ describe('bundle composition', () => {
       clearSession: expect.any(Function),
       setSessionFolders: expect.any(Function),
     });
-    expect([...tools.registered].sort()).toEqual(['actions_cancel', 'actions_inspect', 'actions_list', 'actions_register', 'actions_run', 'actions_set_params']);
+    expect([...tools.registered].sort()).toEqual(['actions_cancel', 'actions_configure', 'actions_query', 'actions_run']);
     expect([...connection.routes].sort()).toEqual(Object.values(ACTIONS_API_PATHS).sort());
 
     for (const dispose of disposers) dispose();

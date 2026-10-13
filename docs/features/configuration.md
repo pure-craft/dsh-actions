@@ -10,7 +10,7 @@ Action 定义的唯一来源是独立的 `actions.json`（**JSONC**：允许注�
 | --- | --- | --- |
 | 全局 | `~/.dsh/actions.json`（`DSH_HOME` 可覆盖根目录） | 个人常用、跨工作区 |
 | 工作区 | `<workspace>/.dsh/actions.json` | 项目共享，随仓库提交（默认选择） |
-| 会话 | `<dshHome>/sessions/<projectKey>/<sessionId>/actions.json` | 仅当前会话可见，由 `actions_register` 写入（见[会话层](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/session-layer.md)） |
+| 会话 | `<dshHome>/sessions/<projectKey>/<sessionId>/actions.json` | 仅当前会话可见，由 `actions_configure` 写入（见[会话层](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/session-layer.md)） |
 
 每个文件必须声明 `"version": "1.0.0"`——这是枚举白名单门，不是 semver；其他取值整层降级为 `unsupported-version`。
 
@@ -22,7 +22,7 @@ Action 定义的唯一来源是独立的 `actions.json`（**JSONC**：允许注�
 | --- | --- | --- |
 | `label` | 是 | 展示名；也是跨层合并键与稳定 id（`<layer>:<label>`）的基础 |
 | `command` | 是（`extends` 条目可省略，继承基定义） | Shell 命令，经 `shell -c` 在工作区沙箱边界内执行；可引用 `${input:id}` |
-| `detail` | 否 | 一行描述，面板与 `actions_list` 都展示——Agent 靠它判断任务是否合用，务必写 |
+| `detail` | 否 | 一行描述，面板与 `actions_query` 都展示——Agent 靠它判断任务是否合用，务必写 |
 | `visibility` | 否 | `all`（默认，面板+Agent）/ `ui`（仅面板）/ `agent`（仅 Agent 工具） |
 | `approval` | 否 | `never`（默认）/ `agent` / `always`——运行前的审批要求，见下文 |
 | `options.cwd` | 否 | 工作目录，相对工作区根（默认工作区根） |
@@ -46,7 +46,7 @@ Action 定义的唯一来源是独立的 `actions.json`（**JSONC**：允许注�
 | `default` | 否 | 未提供值时的兜底；`select` 必须落在 `options` 内 |
 | `options` | `select` 必备 | 允许取值，非空 |
 
-两条关键规则：**替换是原文替换、不加引号不转义**（值可能含空格或 shell 元字符时由作者自行加引号）；**参数参与冲突判定**——同一 Action 不同参数的运行互不冲突。运行时的取值链为 显式传参 > 会话固定值 > 配置 `default`（见[会话层](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/session-layer.md)与[面板](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/panel.md)）。
+两条关键规则：**替换是原文替换、不加引号不转义**（值可能含空格或 shell 元字符时由作者自行加引号）；**参数参与冲突判定**——同一 Action 不同参数的运行互不冲突。运行时的取值链为 显式传参 > 配置 `default`；不存在会话级参数记忆（见[会话层](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/session-layer.md)与[面板](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/panel.md)）。
 
 ## approval（审批要求）
 

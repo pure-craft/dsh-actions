@@ -20,7 +20,6 @@
 import type { ActionRunStatus, ActionRunSummary, ProjectActionSummary, RunStartResult } from '../../contract.js';
 import { resolve } from 'node:path';
 import { normalizeParams } from '../config/params.js';
-import type { SessionParamStore } from './session-params.js';
 import { substituteVariables } from '../config/variables.js';
 import { OutputRingBuffer } from './buffer.js';
 import type { RingBufferSnapshot } from './buffer.js';
@@ -220,8 +219,6 @@ export interface RunService {
 
 export interface RunServiceDeps {
   shell?: ShellLike | undefined;
-  /** Session pin board for input values (T38); absent means no middle level. */
-  sessionParams?: SessionParamStore | undefined;
   jobs?: JobsLike | undefined;
   /** Per-run retained-output cap. Default 256 KiB. */
   outputLimitBytes?: number | undefined;
@@ -516,15 +513,13 @@ export function createRunService(deps: RunServiceDeps = {}): RunService {
     async run(action, options) {
       if (disposed) throw new RunServiceError('disposed', 'Run service is disposed');
 
-      // 0. Parameter evaluation (T33 × T38): the three-level chain — explicit
-      // call params win over the session pin board, pins win over config
-      // defaults (a pin also SATISFIES `required`). Validate/normalize the
-      // merged values BEFORE anything else; the canonical signature joins
-      // the conflict key below.
-      const effectiveParams = { ...deps.sessionParams?.get(options.sessionId, action.id), ...options.params };
+      // 0. Parameter evaluation: explicit per-run values override declared
+      // input defaults. There is deliberately no hidden session parameter
+      // layer. Validate before conflict detection so the canonical signature
+      // below is stable.
       let normalized;
       try {
-        normalized = normalizeParams(action.inputs, effectiveParams);
+        normalized = normalizeParams(action.inputs, options.params);
       } catch (error) {
         throw new RunServiceError('invalid-params', `Action "${action.label}": ${errorMessage(error)}`, {
           cause: error,
@@ -587,7 +582,7 @@ export function createRunService(deps: RunServiceDeps = {}): RunService {
         settledPromise,
       };
       // T33: the wire summary carries the resolved values when the action
-      // declares inputs (actions_inspect shows what the run actually used).
+      // declares inputs (actions_query shows what the run actually used).
       if (action.inputs !== undefined && action.inputs.length > 0) record.summary.params = normalized.values;
       records.set(record.summary.id, record);
       emitChange(record);

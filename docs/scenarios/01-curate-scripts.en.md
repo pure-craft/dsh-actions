@@ -19,7 +19,7 @@ Afterwards every task has a unified `label` / `detail` / run policy, and the ori
 
 ## What you get
 
-- **One entry point**: the same list shows up both in the panel (one click for a person) and as agent tools (discoverable and callable via `actions_list`);
+- **One entry point**: the same list shows up both in the panel (one click for a person) and as agent tools (discoverable and callable via `actions_query`);
 - **Curation on the way**: this is the moment to add the missing `detail` descriptions, mark exclusive tasks `runOptions.instancePolicy: "reject"`, and mark high-risk tasks with `approval` — behavioral constraints the original format could not express all have a place in `actions.json`;
 - **Room to evolve**: the definition follows the repo, reviews go through the normal git flow, and the agent can keep improving it afterwards.
 

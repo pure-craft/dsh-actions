@@ -116,10 +116,6 @@ const zh = {
   // T34: parameter form
   paramsModalTitle: '运行参数 · {label}',
   paramSelectPlaceholder: '选择…',
-  paramPin: '记住参数',
-  paramPinTooltip: '记住后，本会话内再运行这个任务时自动用这组值预填（显式填写优先）；仅当前会话有效，会话结束即失效。',
-  paramPinned: '已记住 {count} 项',
-  paramUnpin: '解除固定',
   // Terminal block labels
   termSignal: '信号 {signal}',
   termExitCode: '退出码 {code}',
@@ -244,10 +240,6 @@ const en: Record<LocaleKey, string> = {
   workspaceCollapse: 'Collapse run area',
   workspaceExpand: 'Expand run area',
   paramsModalTitle: 'Run parameters · {label}',
-  paramPin: 'Remember params',
-  paramPinTooltip: 'Once remembered, future runs of this task in this session prefill with these values (explicit entries always win); session-scoped, gone when the session ends.',
-  paramPinned: '{count} remembered',
-  paramUnpin: 'Unpin',
   paramSelectPlaceholder: 'Select…',
   termSignal: 'Signal {signal}',
   termExitCode: 'Exit code {code}',

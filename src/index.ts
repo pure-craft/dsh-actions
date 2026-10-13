@@ -4,20 +4,22 @@ import { seedGlobalActionsExample } from './host/config/seed.js';
 import { createConfigWatcher } from './host/config/watch.js';
 import { createActionsApiRoutes } from './host/rpc/index.js';
 import type { ConnectionFetchRouteLike } from './host/rpc/index.js';
-import { createRunService, createSessionParamStore, resolveRunCapabilities } from './host/run/index.js';
+import { createRunService, resolveRunCapabilities } from './host/run/index.js';
 import { resolveActionsLayerPaths, resolveDshHome, sessionActionsPath } from './host/config/paths.js';
 import {
   clearSessionActionsFile,
   configureSessionActionsFile,
   deleteActionEntryFromFile,
-  writeSessionActionEntry,
   writeSessionActionFolders,
 } from './host/config/session-file.js';
 import { isSkillsLike, registerAuthoringSkill } from './host/skills.js';
 import { registerActionTools } from './host/tools/index.js';
-import type { ApprovalServiceLike, SandboxPolicyResolverLike, ToolsLike } from './host/tools/index.js';
+import type { ActionLayerStoreLike, ApprovalServiceLike, SandboxPolicyResolverLike, ToolsLike } from './host/tools/index.js';
 import type { HostContext } from './host/types.js';
 import type { ActionEntryConfig } from './contract.js';
+import { registerAvailableActionsContext } from './host/action-context.js';
+import { createActionEntry, deleteActionEntry, inspectActionLayer, updateActionEntry } from './host/config/action-store.js';
+import type { ConfigurableActionLayer } from './host/config/action-store.js';
 
 export const name = ACTIONS_PLUGIN_ID;
 export const ACTIONS_SERVICE = 'dshActions';
@@ -50,7 +52,7 @@ export interface DshActionsService {
  * instead of registering anything. A hot reload hides this, because by then
  * every service already exists.
  */
-export const inject = ['tools', 'connection', 'agents', 'skills', 'approval'];
+export const inject = ['tools', 'connection', 'agents', 'skills', 'approval', 'systemPrompt'];
 
 interface ConnectionFetchLike {
   register(route: ConnectionFetchRouteLike): Promise<() => void>;
@@ -94,10 +96,7 @@ export interface ApplyInternals {
 
 export function apply(ctx: HostContext, internals: ApplyInternals = {}): void {
   const capabilities = resolveRunCapabilities(ctx);
-  // T38: session pin board, shared by runs (fallback evaluation), agent
-  // tools (actions_set_params), and the RPC params endpoint.
-  const sessionParams = createSessionParamStore();
-  const runs = createRunService({ ...capabilities, sessionParams });
+  const runs = createRunService(capabilities);
   ctx.effect(
     () => () => {
       runs.dispose();
@@ -111,7 +110,7 @@ export function apply(ctx: HostContext, internals: ApplyInternals = {}): void {
     loadCatalog: (workspace: string, sessionId?: string) =>
       loadActionsCatalog(workspace, sessionId === undefined ? {} : { sessionId }),
   };
-  // T38 × T47: manual catalog-change fan-out shared by pin writes and
+  // T47: manual catalog-change fan-out shared by configuration writes and
   // session-action registrations (declared before tools registration).
   const manualCatalogListeners = new Map<string, Set<() => void>>();
   const notifyCatalogChanged = (workspace: string): void => {
@@ -145,6 +144,33 @@ export function apply(ctx: HostContext, internals: ApplyInternals = {}): void {
   // session approval channel; without it they fail closed (unavailable).
   const approval = ctx.get('approval');
   const approvalService = isApprovalServiceLike(approval) ? approval : undefined;
+  const layerPath = (layer: ConfigurableActionLayer, workspace: string, sessionId: string): string => {
+    const paths = resolveActionsLayerPaths(workspace);
+    return layer === 'global'
+      ? paths.global
+      : layer === 'workspace'
+        ? paths.workspace
+        : sessionActionsPath(resolveDshHome(), workspace, sessionId);
+  };
+  const actionLayers: ActionLayerStoreLike = {
+    inspect: (layer, label, workspace, sessionId) => inspectActionLayer(layerPath(layer, workspace, sessionId), label),
+    create: async (layer, entry, expectedStoreRevision, workspace, sessionId) => {
+      const path = layerPath(layer, workspace, sessionId);
+      await createActionEntry(path, entry, expectedStoreRevision);
+      return { path };
+    },
+    update: async (layer, label, expectedRevision, changes, workspace, sessionId) => {
+      const path = layerPath(layer, workspace, sessionId);
+      return { path, ...(await updateActionEntry(path, label, expectedRevision, changes)) };
+    },
+    delete: async (layer, label, expectedRevision, workspace, sessionId) => {
+      const path = layerPath(layer, workspace, sessionId);
+      return { path, before: await deleteActionEntry(path, label, expectedRevision) };
+    },
+  };
+  if (ctx.on) registerAvailableActionsContext(ctx as Parameters<typeof registerAvailableActionsContext>[0], catalog);
+  else console.error('[dsh-actions] Host context cannot register Actions runtime context');
+
   const tools = ctx.get('tools');
   if (isToolsLike(tools)) {
     ctx.effect(
@@ -154,16 +180,7 @@ export function apply(ctx: HostContext, internals: ApplyInternals = {}): void {
           runs,
           sandboxPolicy: sandboxPolicyResolver,
           approval: approvalService,
-          sessionParams,
-          // T47: actions_register writes the session layer's actions file
-          // (host session directory layout) and republishes catalog frames.
-          sessionActions: {
-            write: async (sessionId, workspace, entry) => {
-              const path = sessionActionsPath(resolveDshHome(), workspace, sessionId);
-              await writeSessionActionEntry(path, entry);
-              return { path };
-            },
-          },
+          actionLayers,
           notifyCatalogChanged,
         }),
       'dsh-actions: agent tools',
@@ -189,7 +206,7 @@ export function apply(ctx: HostContext, internals: ApplyInternals = {}): void {
 
   // T21: polling configuration watcher feeding /catalog/events. Pollers are
   // reference-counted per workspace; streams unsubscribe on disconnect, so
-  // no polling runs without an attached client. T38: pin writes republish
+  // no polling runs without an attached client. Configuration writes republish
   // through a manual trigger that shares the same listener channel.
   const configWatcher = createConfigWatcher();
 
@@ -205,12 +222,11 @@ export function apply(ctx: HostContext, internals: ApplyInternals = {}): void {
       workspaceRoot: workspace,
       sessionId,
     }),
-    sessionParams,
     watchSession: (workspace, sessionId) => configWatcher.watchSession(workspace, sessionId),
     // T66: a session-selected folder's config joins the same poll set, so a
     // repository edit refreshes the catalog like any layer edit does.
     watchFolder: (workspace, folder) => configWatcher.watchFolder(workspace, folder),
-    // T50: layer → actions.json path, entry removal with atomic write-back.
+    // Web deletion keeps its existing explicit confirmation path.
     deleteActionEntry: async (layer, label, workspace, sessionId) => {
       // T66: folder definitions belong to their repository. The panel offers no
       // delete entry for them, and this refuses too — falling through to the

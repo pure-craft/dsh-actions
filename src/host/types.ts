@@ -26,4 +26,5 @@ export interface HostContext {
   get(key: string): unknown;
   provide?(key: string, value: unknown): unknown;
   effect(factory: () => (() => void) | void, label?: string): void;
+  on?(name: string, listener: (...args: unknown[]) => unknown): () => void;
 }

@@ -10,7 +10,7 @@ The single source of Action definitions is a standalone `actions.json` (**JSONC*
 | --- | --- | --- |
 | Global | `~/.dsh/actions.json` (`DSH_HOME` can override the root) | personal, cross-workspace |
 | Workspace | `<workspace>/.dsh/actions.json` | shared by the project, committed with the repo (the default choice) |
-| Session | `<dshHome>/sessions/<projectKey>/<sessionId>/actions.json` | visible to this session only, written by `actions_register` (see [the session layer](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/session-layer.en.md)) |
+| Session | `<dshHome>/sessions/<projectKey>/<sessionId>/actions.json` | visible to this session only, written by `actions_configure` (see [the session layer](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/session-layer.en.md)) |
 
 Every file must declare `"version": "1.0.0"` — this is an enum allowlist gate, not semver; any other value demotes the whole layer to `unsupported-version`.
 
@@ -22,7 +22,7 @@ The top level may also contain session-only `folders: string[]`: it loads each l
 | --- | --- | --- |
 | `label` | yes | display name; also the cross-layer merge key and the basis of the stable id (`<layer>:<label>`) |
 | `command` | yes (may be omitted on an `extends` entry, which inherits the base definition) | shell command, run through `shell -c` inside the workspace sandbox boundary; may reference `${input:id}` |
-| `detail` | no | one-line description, shown in the panel and by `actions_list` alike — **the agent judges whether a task fits by this line, so always write it** |
+| `detail` | no | one-line description, shown in the panel and by `actions_query` alike — **the agent judges whether a task fits by this line, so always write it** |
 | `visibility` | no | `all` (default, panel + agent) / `ui` (panel only) / `agent` (agent tools only) |
 | `approval` | no | `never` (default) / `agent` / `always` — the approval requirement before a run, see below |
 | `options.cwd` | no | working directory, relative to the workspace root (default: the workspace root) |
@@ -46,7 +46,7 @@ Only two types are kept: `string` and `select`. Reference them as `${input:id}` 
 | `default` | no | fallback when no value is supplied; for `select` it must be one of `options` |
 | `options` | required for `select` | the allowed values, non-empty |
 
-Two rules matter: **substitution is literal — no quoting, no escaping** (if a value may contain spaces or shell metacharacters, the author quotes it in the command); and **parameters take part in conflict detection** — two runs of the same Action with different parameters do not conflict. At run time the resolution chain is explicit argument > session-pinned value > config `default` (see [the session layer](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/session-layer.en.md) and [the panel](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/panel.en.md)).
+Two rules matter: **substitution is literal — no quoting, no escaping** (if a value may contain spaces or shell metacharacters, the author quotes it in the command); and **parameters take part in conflict detection** — two runs of the same Action with different parameters do not conflict. At run time the resolution chain is explicit argument > config `default`; there is no session-level parameter memory (see [the session layer](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/session-layer.en.md) and [the panel](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/panel.en.md)).
 
 ## `approval` (approval requirement)
 

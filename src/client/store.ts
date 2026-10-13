@@ -72,10 +72,9 @@ export interface PanelState {
   /**
    * T34: an action with declared `inputs` waits on the in-panel parameter
    * form. `values` are the current field values; `error` is the inline
-   * message after a 400 invalid-params rejection; `pin` (T39) asks to save
-   * the values to this session after a successful start.
+   * message after a 400 invalid-params rejection.
    */
-  pendingParams: { actionId: string; values: Record<string, string>; error: string | null; pin: boolean } | null;
+  pendingParams: { actionId: string; values: Record<string, string>; error: string | null } | null;
   /** T41: an active run's tab close waits on the terminate-and-close confirmation. */
   closeRunConfirm: { runId: string; actionLabel: string } | null;
   /** T51: an action delete waits on the strong (acknowledge-gated) confirmation. */
@@ -90,9 +89,8 @@ export interface PanelState {
 }
 
 /**
- * Resolve initial form values for an action's declared inputs. Layer order:
- * explicit prefill (e.g. a run's own params) wins, then the session's
- * remembered values, then the declaration's default.
+ * Resolve initial form values for an action's declared inputs. An explicit
+ * prefill (for example, a run's own params) wins over the declaration default.
  */
 export function resolveParamValues(
   inputs: readonly ActionInputConfig[],
@@ -450,7 +448,7 @@ export class PanelStore {
    * Entry point for every run button: an action with declared `inputs` opens
    * the parameter form first; anything else starts immediately. `prefill`
    * (typically a run's own params on rerun) seeds the form values ahead of
-   * the session memory and the declared defaults.
+   * the declared defaults.
    */
   requestRun(actionId: string, prefill?: Record<string, string>): void {
     const action = this.stateValue.catalog?.actions.find((candidate) => candidate.id === actionId);
@@ -459,14 +457,8 @@ export class PanelStore {
       void this.runAction(actionId);
       return;
     }
-    // T39 three-level prefill: prefill (rerun) > session pins > declared defaults.
-    const values = resolveParamValues(inputs, prefill, this.sessionParamsOf(actionId));
-    this.update({ pendingParams: { actionId, values, error: null, pin: false } });
-  }
-
-  /** This session's pinned values for an action (rides the catalog). */
-  sessionParamsOf(actionId: string): Record<string, string> | undefined {
-    return this.stateValue.catalog?.sessionParams?.[actionId];
+    const values = resolveParamValues(inputs, prefill);
+    this.update({ pendingParams: { actionId, values, error: null } });
   }
 
   /** T41: the action's presentation.panel mode ('new' when unset or unknown). */
@@ -559,49 +551,8 @@ export class PanelStore {
     this.update({ pendingParams: { ...form, values: { ...form.values, [inputId]: value }, error: null } });
   }
 
-  updateParamPin(pin: boolean): void {
-    const form = this.stateValue.pendingParams;
-    if (form === null) return;
-    this.update({ pendingParams: { ...form, pin } });
-  }
-
   dismissParamForm(): void {
     this.update({ pendingParams: null });
-  }
-
-  /** T39: pin values to this session; the response updates the local pin board. */
-  private async pinParams(actionId: string, values: Record<string, string>): Promise<void> {
-    const signal = this.signal;
-    try {
-      const pinned = await this.api.saveSessionParams(this.stateValue.sessionId, actionId, values, signal);
-      if (signal.aborted) return;
-      this.adoptSessionParams(actionId, pinned);
-    } catch {
-      if (!signal.aborted) this.update({ actionError: true });
-    }
-  }
-
-  /** T39: remove an action's pin from this session. */
-  async unpinParams(actionId: string): Promise<void> {
-    const signal = this.signal;
-    this.update({ actionError: false });
-    try {
-      const pinned = await this.api.saveSessionParams(this.stateValue.sessionId, actionId, undefined, signal);
-      if (signal.aborted) return;
-      this.adoptSessionParams(actionId, pinned);
-    } catch {
-      if (!signal.aborted) this.update({ actionError: true });
-    }
-  }
-
-  /** Patch the local catalog's sessionParams board after a pin write/clear. */
-  private adoptSessionParams(actionId: string, values: Record<string, string>): void {
-    const catalog = this.stateValue.catalog;
-    if (catalog === null) return;
-    const sessionParams = { ...catalog.sessionParams };
-    if (Object.keys(values).length === 0) delete sessionParams[actionId];
-    else sessionParams[actionId] = values;
-    this.update({ catalog: { ...catalog, sessionParams } });
   }
 
   async runAction(actionId: string, options: { confirmed?: boolean; params?: Record<string, string> } = {}): Promise<void> {
@@ -621,11 +572,6 @@ export class PanelStore {
         return;
       }
       this.upsertRun(result.run);
-      // T39: a form-backed request that asked to pin writes the values now
-      // (covers the confirm-then-run path too — the form stays open across 409).
-      const pinRequested = this.stateValue.pendingParams?.actionId === actionId
-        && this.stateValue.pendingParams.pin === true;
-      if (pinRequested && options.params !== undefined) void this.pinParams(actionId, options.params);
       if (result.kind === 'started') {
         this.update({
           selectedActionId: actionId,

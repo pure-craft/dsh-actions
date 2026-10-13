@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ActionsCatalog, ProjectActionSummary, RunStreamFrame } from '../src/contract.js';
 import { ACTIONS_API_PATHS, createActionsApiRoutes } from '../src/host/rpc/index.js';
 import type { ActionsApiDeps } from '../src/host/rpc/index.js';
-import { createRunService, createSessionParamStore } from '../src/host/run/index.js';
+import { createRunService } from '../src/host/run/index.js';
 import type { RunService, ShellExecRequestLike, ShellProcessLike } from '../src/host/run/index.js';
 
 const ACTION: ProjectActionSummary = {
@@ -78,7 +78,6 @@ function createDeps(overrides: Partial<ActionsApiDeps> = {}): ActionsApiDeps & {
       ((workspace, sessionId) => ({ mode: 'danger-full-access', workspaceRoot: workspace, sessionId })),
   };
   if (overrides.watchCatalogChanges !== undefined) deps.watchCatalogChanges = overrides.watchCatalogChanges;
-  if (overrides.sessionParams !== undefined) deps.sessionParams = overrides.sessionParams;
   if (overrides.notifyCatalogChanged !== undefined) deps.notifyCatalogChanged = overrides.notifyCatalogChanged;
   if (overrides.watchSession !== undefined) deps.watchSession = overrides.watchSession;
   if (overrides.watchFolder !== undefined) deps.watchFolder = overrides.watchFolder;
@@ -753,120 +752,6 @@ describe('runs endpoint params (T33)', () => {
     expect(deps.runs.listRuns()).toHaveLength(0);
   });
 });
-
-describe('params endpoint and session pin board (T38)', () => {
-  const PARAM_ACTION: ProjectActionSummary = {
-    ...ACTION,
-    inputs: [
-      { id: 'target', type: 'string', required: true },
-      { id: 'mode', type: 'select', options: ['debug', 'release'], default: 'debug' },
-    ],
-  };
-
-  function makePinDeps() {
-    const watcher = new FakeCatalogWatcher();
-    const store = createSessionParamStore();
-    const proc = fakeShellProcess(['hello']);
-    const deps = createDeps({
-      loadCatalog: async () => catalog([PARAM_ACTION]),
-      // The API layer and the run service share one store, as in composition.
-      runs: createRunService({
-        shell: { resolve: (request) => request, execute: async () => proc },
-        pollIntervalMs: 1,
-        sleep: () => Promise.resolve(),
-        sessionParams: store,
-      }),
-      sessionParams: store,
-      watchCatalogChanges: watcher.watch,
-      notifyCatalogChanged: (workspace) => watcher.trigger(workspace),
-    });
-    return { deps, watcher };
-  }
-
-  it('set → catalog carries own sessionParams → clear removes them', async () => {
-    const { deps } = makePinDeps();
-    const set = await route(deps, ACTIONS_API_PATHS.params).fetch(
-      post({ sessionId: 'session-1', actionId: PARAM_ACTION.id, values: { target: 'web' } }),
-    );
-    expect(set.status).toBe(200);
-    expect(((await set.json()) as { sessionParams: Record<string, string> }).sessionParams).toEqual({ target: 'web' });
-
-    const withSession = (await (
-      await route(deps, ACTIONS_API_PATHS.catalog).fetch(post({ sessionId: 'session-1' }))
-    ).json()) as ActionsCatalog & { sessionParams?: Record<string, Record<string, string>> };
-    expect(withSession.sessionParams).toEqual({ [PARAM_ACTION.id]: { target: 'web' } });
-
-    // Another session never sees the pin.
-    const other = (await (
-      await route(deps, ACTIONS_API_PATHS.catalog).fetch(post({ sessionId: 'session-2' }))
-    ).json()) as ActionsCatalog & { sessionParams?: Record<string, Record<string, string>> };
-    expect(other.sessionParams).toEqual({});
-
-    const cleared = await route(deps, ACTIONS_API_PATHS.params).fetch(
-      post({ sessionId: 'session-1', actionId: PARAM_ACTION.id, clear: true }),
-    );
-    expect(((await cleared.json()) as { sessionParams: Record<string, string> }).sessionParams).toEqual({});
-    deps.runs.dispose();
-  });
-
-  it('validates declarations at pin time: undeclared ids and bad select values 400', async () => {
-    const { deps } = makePinDeps();
-    const undeclared = await route(deps, ACTIONS_API_PATHS.params).fetch(
-      post({ sessionId: 'session-1', actionId: PARAM_ACTION.id, values: { nope: 'x' } }),
-    );
-    expect(undeclared.status).toBe(400);
-    expect(((await undeclared.json()) as { error: { code: string } }).error.code).toBe('invalid-params');
-
-    const badSelect = await route(deps, ACTIONS_API_PATHS.params).fetch(
-      post({ sessionId: 'session-1', actionId: PARAM_ACTION.id, values: { mode: 'prod' } }),
-    );
-    expect(badSelect.status).toBe(400);
-
-    const unknownAction = await route(deps, ACTIONS_API_PATHS.params).fetch(
-      post({ sessionId: 'session-1', actionId: 'workspace:nope', values: { target: 'web' } }),
-    );
-    expect(unknownAction.status).toBe(404);
-
-    const noValues = await route(deps, ACTIONS_API_PATHS.params).fetch(
-      post({ sessionId: 'session-1', actionId: PARAM_ACTION.id }),
-    );
-    expect(noValues.status).toBe(400);
-    deps.runs.dispose();
-  });
-
-  it('/runs transparently falls back to pinned values', async () => {
-    const { deps } = makePinDeps();
-    await route(deps, ACTIONS_API_PATHS.params).fetch(
-      post({ sessionId: 'session-1', actionId: PARAM_ACTION.id, values: { target: 'web' } }),
-    );
-    const response = await route(deps, ACTIONS_API_PATHS.runs).fetch(
-      post({ sessionId: 'session-1', actionId: PARAM_ACTION.id }),
-    );
-    expect(response.status).toBe(200);
-    const result = (await response.json()) as { kind: string; run: { params?: Record<string, string> } };
-    expect(result.kind).toBe('started');
-    expect(result.run.params).toEqual({ target: 'web', mode: 'debug' });
-    deps.runs.dispose();
-  });
-
-  it('a pin write republishes the catalog events frame', async () => {
-    const { deps } = makePinDeps();
-    const response = await route(deps, ACTIONS_API_PATHS.catalogEvents).fetch(post({ sessionId: 'session-1' }));
-    const collector = frameCollector(response);
-    await waitForFrames(collector.frames, 1);
-
-    await route(deps, ACTIONS_API_PATHS.params).fetch(
-      post({ sessionId: 'session-1', actionId: PARAM_ACTION.id, values: { target: 'web' } }),
-    );
-    await waitForFrames(collector.frames, 2);
-    const updated = collector.frames[1] as { catalog: { sessionParams?: Record<string, Record<string, string>> } };
-    expect(updated.catalog.sessionParams).toEqual({ [PARAM_ACTION.id]: { target: 'web' } });
-
-    await collector.cancel();
-    deps.runs.dispose();
-  });
-});
-
 
 describe('T47 session layer over RPC', () => {
   it('runs refuses an unresolved extends with 400 unknown-extends', async () => {

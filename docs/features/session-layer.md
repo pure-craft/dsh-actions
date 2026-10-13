@@ -45,12 +45,12 @@
 
 ## 写入路径：会话层由谁写
 
-- **Agent 写任务定义**：`actions_register`（见下节）。
-- **配置完整会话层**：宿主插件调用 `dshActions.configureSession(sessionId, workspace, { folders, actions })`，在一次原子写入中替换目录选择与会话 Action、保留文件 `version`，成功后立即刷新 catalog；`clearSession(sessionId, workspace)` 原子清空两者。兼容方法 `setSessionFolders(sessionId, workspace, folders)` 仍只替换 `folders` 并保留 Actions。也可以直接编辑会话层的 `actions.json`（面板里会话分区的编辑按钮就是打开这个文件，文件存在时可见）。目前**没有**目录选择器 UI，也**没有**对应的 Agent 工具：选择由用户或宿主插件决定，Agent 只是消费它（`actions_list` 会带上自己的会话，因此能看到所选目录里的 Action）。
+- **Agent 写任务定义**：`actions_configure`（见下节）。
+- **配置完整会话层**：宿主插件调用 `dshActions.configureSession(sessionId, workspace, { folders, actions })`，在一次原子写入中替换目录选择与会话 Action、保留文件 `version`，成功后立即刷新 catalog；`clearSession(sessionId, workspace)` 原子清空两者。兼容方法 `setSessionFolders(sessionId, workspace, folders)` 仍只替换 `folders` 并保留 Actions。也可以直接编辑会话层的 `actions.json`（面板里会话分区的编辑按钮就是打开这个文件，文件存在时可见）。目前**没有**目录选择器 UI，也**没有**对应的 Agent 工具：选择由用户或宿主插件决定，Agent 只是消费它（`actions_query` 会带上自己的会话，因此能看到所选目录里的 Action）。
 
-## 写入路径：`actions_register`
+## 写入路径：`actions_configure`
 
-Agent 经 `actions_register` 把新任务写进会话层，**注册必经用户批准**（Agent 给自己造可执行命令属高危操作）。支持两种粒度：
+Agent 经 `actions_configure` 把新任务写进会话层，**注册必经用户批准**（Agent 给自己造可执行命令属高危操作）。支持两种粒度：
 
 - 独立命令：完整的一条新任务定义；
 - 变体：`extends: "<layer>:<label>"` 继承现有任务的定义（cwd/env/inputs/runOptions 等），配合 `params` 把参数钉死一档——例如把 `workspace:deploy` 派生成"部署到 staging"的会话专用变体。
@@ -60,5 +60,5 @@ Agent 经 `actions_register` 把新任务写进会话层，**注册必经用户�
 ## 生命周期与提升
 
 - 会话层文件随会话目录存续；不同会话互不可见。
-- 会话**参数 pin**（`actions_set_params`）是另一回事：纯内存态，随会话销毁——别把两者混淆：会话层存任务定义，pin 板存参数取值。
+- 运行参数只来自本次显式传参和 Action 声明的 `default`；不存在会话级参数记忆或隐藏参数源。
 - 经得起用的会话任务应提升到文件层：面板会话分区提供审阅与「提升」入口（review-and-persist），人确认后写入工作区/全局配置，走正常的 git 审查。

@@ -16,7 +16,6 @@
  * - /api/dsh-actions/runs/stream    { sessionId, runId, sinceOffset? } -> NDJSON RunStreamFrame lines
  * - /api/dsh-actions/runs/events    { sessionId }               -> NDJSON RunDiscoveryFrame lines
  * - /api/dsh-actions/catalog/events { sessionId }               -> NDJSON CatalogEventFrame lines
- * - /api/dsh-actions/params         { sessionId, actionId, values? | clear:true } -> pinned values (T38)
  * - /api/dsh-actions/actions/delete { sessionId, actionId }     -> { deleted, actionId } (T50)
  *
  * Session binding (T15): run state is isolated per session. Starting a run
@@ -32,7 +31,6 @@ import { ACTIONS_PLUGIN_ID } from '../../contract.js';
 import type { ActionSourceLayer, ActionsCatalog, CatalogEventFrame, RunDiscoveryFrame, RunStreamFrame } from '../../contract.js';
 import { RunServiceError } from '../run/service.js';
 import type { RunInspection, RunService, SandboxExecutionPolicyLike } from '../run/service.js';
-import type { SessionParamStore } from '../run/session-params.js';
 
 /** Structural mirror of the connection.fetch route shape the host consumes. */
 export interface ConnectionFetchRouteLike {
@@ -62,12 +60,7 @@ export interface ActionsApiDeps {
    * Without it /catalog/events serves only the first-frame snapshot.
    */
   watchCatalogChanges?(workspace: string, listener: () => void): () => void;
-  /** Session pin board for input values (T38). */
-  sessionParams?: SessionParamStore | undefined;
-  /**
-   * Manual catalog-change trigger (T38): after a pin write, /catalog/events
-   * subscribers of this workspace republish their assembled catalog frame.
-   */
+  /** Manual catalog-change trigger used after configuration writes. */
   notifyCatalogChanged?(workspace: string): void;
   /** T47: enroll a session's actions file into the workspace's config poller. */
   watchSession?(workspace: string, sessionId: string): void;
@@ -101,7 +94,6 @@ export const ACTIONS_API_PATHS = {
   stream: `${API_PREFIX}/runs/stream`,
   events: `${API_PREFIX}/runs/events`,
   catalogEvents: `${API_PREFIX}/catalog/events`,
-  params: `${API_PREFIX}/params`,
   deleteAction: `${API_PREFIX}/actions/delete`,
 } as const;
 
@@ -409,10 +401,6 @@ async function assembleCatalog(
     sessionLive && sessionId !== undefined
       ? deps.runs.listRuns({ workspace, sessionId }).filter((run) => !hidden.has(run.actionId))
       : [];
-  // T38: the caller session's pin board rides along (only its own).
-  if (sessionLive && sessionId !== undefined) {
-    catalog.sessionParams = deps.sessionParams?.list(sessionId) ?? {};
-  }
   return catalog;
 }
 
@@ -668,61 +656,6 @@ export function createActionsApiRoutes(deps: ActionsApiDeps): ConnectionFetchRou
         const scope = resolveSessionScope(deps, body);
         if (scope instanceof Response) return scope;
         return streamRunEvents(deps, scope.sessionId);
-      },
-    },
-    {
-      path: ACTIONS_API_PATHS.params,
-      methods: ['POST'],
-      requestBody: 'buffered',
-      async fetch(request) {
-        const body = await readBody(request);
-        if (body instanceof Response) return body;
-        // T38: pin writes are session-bound, exactly like runs.
-        const scope = resolveSessionScope(deps, body);
-        if (scope instanceof Response) return scope;
-        const store = deps.sessionParams;
-        if (store === undefined) return failure(503, 'params-unavailable', 'Session params store is not wired');
-        const actionId = requireString(body, 'actionId');
-        if (actionId instanceof Response) return actionId;
-        try {
-          const catalog = await deps.loadCatalog(scope.workspace, scope.sessionId);
-          const action = catalog.actions.find(
-            (candidate) => candidate.id === actionId && candidate.visibility !== 'agent',
-          );
-          if (action === undefined) return failure(404, 'action-not-found', `Unknown action: ${actionId}`);
-          const values = optionalStringMap(body, 'values');
-          if (values instanceof Response) return values;
-          const wantsClear = body.clear === true || (values !== undefined && Object.keys(values).length === 0);
-          if (wantsClear) {
-            store.clear(scope.sessionId, actionId);
-          } else {
-            if (values === undefined) {
-              return failure(400, 'bad-request', 'Provide "values" to pin, or "clear": true to unpin');
-            }
-            // Declaration validation at pin time: values must be a subset of
-            // the declared inputs, select values within options.
-            const declared = new Map((action.inputs ?? []).map((input) => [input.id, input]));
-            for (const [id, value] of Object.entries(values)) {
-              const input = declared.get(id);
-              if (input === undefined) {
-                return failure(400, 'invalid-params', `Unknown input parameter: ${id}`);
-              }
-              if (input.type === 'select' && input.options !== undefined && !input.options.includes(value)) {
-                return failure(
-                  400,
-                  'invalid-params',
-                  `Invalid value for select input "${id}": "${value}" (expected one of: ${input.options.join(', ')})`,
-                );
-              }
-            }
-            store.set(scope.sessionId, actionId, values);
-          }
-          // Republish catalog frames so subscribers see the new pin board.
-          deps.notifyCatalogChanged?.(scope.workspace);
-          return json({ actionId, sessionParams: store.get(scope.sessionId, actionId) });
-        } catch (error) {
-          return mapRunServiceError(error);
-        }
       },
     },
     {

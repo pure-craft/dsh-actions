@@ -103,17 +103,6 @@ export interface ActionsApi {
     signal?: AbortSignal,
   ): Promise<void>;
   /**
-   * T38: pin input values for an action to this session (or clear the pin
-   * with `values: undefined`). Resolves with the action's resulting pinned
-   * map (empty after a clear). The Host republishes catalog frames.
-   */
-  saveSessionParams(
-    sessionId: string,
-    actionId: string,
-    values: Record<string, string> | undefined,
-    signal?: AbortSignal,
-  ): Promise<Record<string, string>>;
-  /**
    * T50/T51: permanently remove an action from its config file. 404 unknown
    * or invisible, 400 invalid id. The catalog event stream repushes.
    */
@@ -195,20 +184,6 @@ export function createHttpApi(base: string = ACTIONS_API_BASE): ActionsApi {
     async subscribeCatalog(sessionId, onFrame, signal) {
       const response = await postStream(`${base}/catalog/events`, { sessionId }, signal);
       await readNdjson(response, (value) => { onFrame(parseCatalogEventFrame(value)); });
-    },
-    async saveSessionParams(sessionId, actionId, values, signal) {
-      const body: Record<string, unknown> = { sessionId, actionId };
-      if (values === undefined) body.clear = true;
-      else body.values = values;
-      const result = await postJson(`${base}/params`, body, signal);
-      if (typeof result !== 'object' || result === null) throw new Error('invalid params payload');
-      const record = (result as Record<string, unknown>).sessionParams;
-      if (typeof record !== 'object' || record === null) return {};
-      const pinned: Record<string, string> = {};
-      for (const [key, value] of Object.entries(record as Record<string, unknown>)) {
-        if (typeof value === 'string') pinned[key] = value;
-      }
-      return pinned;
     },
     async deleteAction(sessionId, actionId, signal) {
       await postJson(`${base}/actions/delete`, { sessionId, actionId }, signal);

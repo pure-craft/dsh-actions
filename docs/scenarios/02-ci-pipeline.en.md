@@ -52,8 +52,8 @@ Credentials never go into the config file: the script reads `JENKINS_TOKEN`, and
 - **Trigger a build**: fill in the job name in the panel form (or have the agent call with `params`); output streams live;
 - **Check status**: the `append` mode puts each query below the previous one, forming a timeline of status;
 - **Parameterized release**: the `select` dropdown narrows the environment to legal values, and `approval: "always"` means you cannot click wrong — a person gets a confirmation dialog, an agent asks you first;
-- **Spending the week validating staging?** Pin `env=staging` to the session (checkbox in the form, or `actions_set_params`) and you never fill it in again; it disappears when the session ends;
-- **Want a dedicated "release to staging" entry?** Have the agent register a session-level variant with `actions_register` + `extends: "global:ci-release"` + `params: { env: "staging" }` (registration always needs your approval), then promote it to the global layer if it earns its keep.
+- **Spending the week validating staging?** Pin `env=staging` to the session (checkbox in the form, or `actions_configure`) and you never fill it in again; it disappears when the session ends;
+- **Want a dedicated "release to staging" entry?** Have the agent register a session-level variant with `actions_configure` + `extends: "global:ci-release"` + `params: { env: "staging" }` (registration always needs your approval), then promote it to the global layer if it earns its keep.
 
 ## Boundaries
 

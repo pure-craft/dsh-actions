@@ -30,7 +30,7 @@ The lower half of the panel is a permanent run workspace, modeled on VS Code's t
 
 ## Parameter form
 
-A task declaring `inputs` renders a form at run time: prefilled by a three-level chain of last run's parameters > session-pinned value > `default`, with `select` rendered as a dropdown; checking "pin to this session" means later runs need no re-entry (the pinned value dies with the session and is never written into the config file). Field semantics are in the [configuration reference](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/configuration.en.md), and the agent-side counterpart is in [the session layer](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/session-layer.en.md).
+A task declaring `inputs` renders a form at run time: a rerun first carries over that run's explicit parameters, while remaining fields use the declared `default`; `select` renders as a dropdown. Parameters are not remembered implicitly across the session. Field semantics are in the [configuration reference](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/configuration.en.md).
 
 ## Live sync
 

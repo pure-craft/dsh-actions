@@ -39,7 +39,7 @@ VS Code Tasks 的答案是「不用离开编辑器」。DSH Actions 更进一步
 
 配置的唯一来源是独立的 `actions.json`（JSONC）——不提供、也不计划提供对其他任务格式的运行时导入或桥接。
 
-> **现状**：Agent 侧的主动发现目前还比较弱。任务清单不会自动进入 Agent 的上下文，它得先自己调 `actions_list` 才知道有哪些任务。「在会话框直接触发一次运行、把结果回插进对话」也还没做。眼下的状态是——**被人引用时很顺，主动发现并调用还谈不上**。让 Agent 更主动地发现和使用这批任务，是接下来的主要方向。
+> **现状**：新会话启动时，可供 Agent 调用的 Action 摘要与四个 `actions_*` 工具的职责会自动进入运行时上下文；完整命令、参数细节和运行输出仍通过 `actions_query` 渐进披露。尚未完成的是「在会话框直接触发一次运行、把结果回插进对话」。
 
 ## 目录
 
@@ -125,7 +125,7 @@ node scripts/verify-floor.mjs 0.1.5-rc.3      # 列出缺失的 20 个
 }
 ```
 
-`detail` 那一行不是可选装饰：它同时显示在面板和 `actions_list` 的返回里，**Agent 靠它判断这是不是它要找的任务**。
+`detail` 那一行不是可选装饰：它同时显示在面板和 `actions_query` 的返回里，**Agent 靠它判断这是不是它要找的任务**。
 
 打开右侧栏「开始」页的 **Actions** 卡片，点 `check` 旁的运行——输出在下方的 run tab 工作区实时流出。这就是完整闭环：写配置 → 面板点击 → 看输出。保存配置文件即自动生效，无需刷新。
 
@@ -136,9 +136,9 @@ node scripts/verify-floor.mjs 0.1.5-rc.3      # 列出缺失的 20 个
 |  | 怎么发现 | 怎么用 |
 | --- | --- | --- |
 | **人** | 右侧栏 Actions 面板 | 一次点击；带参数的弹出表单；输出流式可见 |
-| **Agent** | `actions_list` | 调用 `actions_run`，结构化返回结果 |
+| **Agent** | `actions_query` | 调用 `actions_run`，结构化返回结果 |
 
-Agent 侧一共 6 个工具：`actions_list` / `actions_run` / `actions_inspect` / `actions_cancel` / `actions_set_params` / `actions_register`，语义与取舍见 [Agent 集成](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/agent-integration.md)。其中 `actions_register` 把会话中发现的流程注册成会话层任务，**必经你批准**——Agent 给自己造可执行命令属高危操作。
+Agent 侧一共 4 个工具：`actions_query` / `actions_run` / `actions_cancel` / `actions_configure`，语义与取舍见 [Agent 集成](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/agent-integration.md)。其中 `actions_configure` 把会话中发现的流程注册成会话层任务，**必经你批准**——Agent 给自己造可执行命令属高危操作。
 
 插件还随包带了一个 `dsh-actions-authoring` skill：你让 Agent 写 `actions.json` 时，它自己就会拿到全字段参考和策展指导，不用你翻文档。
 
@@ -172,7 +172,7 @@ Agent 侧一共 6 个工具：`actions_list` / `actions_run` / `actions_inspect`
 ```
 
 - **合并而非隔离**：工作区可以在全局的同名任务上只改一个字段（比如覆盖 `command` 加参数、或补一个 `detail`），其余字段继承；
-- **会话层由 Agent 写入**：`actions_register` 注册必经你的批准；你觉得好用的，一句话提升到文件层变成长期资产；
+- **会话层由 Agent 写入**：`actions_configure` 注册必经你的批准；你觉得好用的，一句话提升到文件层变成长期资产；
 - **人的同一面板**：三层任务在同一个列表里分区展示，运行方式完全一致——来源只是元信息，不是使用门槛。
 
 ### 一个工作区包含多个仓库

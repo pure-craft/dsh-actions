@@ -25,7 +25,7 @@ Three layers (merge priority ascending), all **JSONC** (comments and trailing co
 
 - `~/.dsh/actions.json` — global layer (`DSH_HOME` overrides the root). Personal, applies to every workspace.
 - `<workspace>/.dsh/actions.json` — workspace layer. Shared with everyone who opens this repository; the right default for project tasks.
-- Session layer: `<dshHome>/sessions/<projectKey>/<sessionId>/actions.json` — lives in the session's own directory, visible only to that session, and written by `actions_register` (see [operating.md](operating.md)); you rarely edit it by hand. Its file may legitimately not exist yet — an empty session layer is normal, not an error.
+- Session layer: `<dshHome>/sessions/<projectKey>/<sessionId>/actions.json` — lives in the session's own directory, visible only to that session, and managed with `actions_configure` (see [operating.md](operating.md)); you rarely edit it by hand. Its file may legitimately not exist yet — an empty session layer is normal, not an error.
 
 Every file must declare `"version": "1.0.0"` — an enum whitelist gate, not semver: any other value degrades the whole file with an `unsupported-version` source error.
 
@@ -104,14 +104,14 @@ To change the selection, edit the session-layer file; host plugins can also call
 | --- | --- | --- |
 | `label` | yes | Display name; also the merge key across layers and the basis of the stable id (`<layer>:<label>`). |
 | `command` | yes | Shell command, executed via `shell -c` under the workspace sandbox boundary. May reference `${input:id}` for declared parameters. |
-| `detail` | no | One-line description shown in the panel and in `actions_list`. Always write one — it is what an agent reads when deciding whether this action fits its goal. |
+| `detail` | no | One-line description shown in the panel and in `actions_query` catalog results. Always write one — it is what an agent reads when deciding whether this action fits its goal. |
 | `visibility` | no | `all` (default) exposes to panel + agent tools; `ui` panel-only; `agent` tools-only. |
 | `approval` | no | `never` (default) / `agent` / `always` — see [Approval requirement](#approval-requirement-approval). |
 | `options.cwd` | no | Working directory, relative to the workspace root (default: workspace root). |
 | `options.env` | no | Extra environment variables for the run. |
 | `runOptions.instanceLimit` | no | Max concurrent instances, clamped to ≥ 1 (default 1). |
 | `runOptions.instancePolicy` | no | `reuse` (default): a duplicate run request returns the existing instance (`already-running`). `reject`: returns `rejected` — for high-risk or exclusive actions. |
-| `presentation.panel` | no | How runs appear in the panel's run-tab workspace. `new` (default): every run opens its own tab; older runs stay as tabs. `dedicated`: the action owns a single tab — re-running replaces its content in place (previous output is discarded from view; the run record is kept). `append`: like `dedicated`, but new output appends below the previous runs' output with a boundary line (VS Code shared-terminal style). Presentation-only — runs stay separate internally and `actions_inspect` is unaffected. |
+| `presentation.panel` | no | How runs appear in the panel's run-tab workspace. `new` (default): every run opens its own tab; older runs stay as tabs. `dedicated`: the action owns a single tab — re-running replaces its content in place (previous output is discarded from view; the run record is kept). `append`: like `dedicated`, but new output appends below the previous runs' output with a boundary line (VS Code shared-terminal style). Presentation-only — runs stay separate internally and `actions_query` still inspects each run independently. |
 | `inputs` | no | Declared parameters — see [Parameters](#parameters-inputs). |
 | `extends` | no | Inherit another action's definition (`"<layer>:<label>"`) as this entry's base — see [Inheritance](#inheritance-extends). |
 | `icon` | no | Panel icon as an Iconify code (`collection:name`, `lucide:` recommended). Add one to commonly used panel-visible Actions so they are easier to scan. UI-only — agent-facing surfaces are a whitelisted field set that structurally excludes it, so never expect an agent to see it. |
@@ -145,7 +145,7 @@ Declare parameters in the `inputs` array; reference them as `${input:id}` inside
 | `type` | yes | `string` (free text) or `select` (one of `options`). |
 | `description` | no | Shown in the panel form and helps agents pick sensible values. |
 | `required` | no | When true, running without a value and no `default` fails with a `missing required input` error naming the ids. |
-| `default` | no | Fallback when the run provides no value; for `select` it must be one of `options`. This is the project-curated baseline — a session may override it with pinned values (never written back to the file), and explicit call params outrank both. |
+| `default` | no | Fallback when the run provides no explicit value; for `select` it must be one of `options`. Explicit call params outrank the declared default, and there is no session-level parameter memory. |
 | `options` | for `select` | Allowed values; non-empty when `type` is `select`. |
 
 Two rules that matter:
@@ -153,7 +153,7 @@ Two rules that matter:
 - **Substitution is verbatim** — values are inserted without quoting or escaping (VS Code `${input:*}` semantics). If a value may contain spaces or shell metacharacters, quote the placeholder yourself (`"${input:name}"`), and never feed untrusted text into a placeholder.
 - **Parameters join the conflict key** — runs of the same action with *different* parameter values do not conflict; `already-running` / `rejected` only trigger for the same (session, action, params) combination.
 
-In the panel, declared inputs render as a run form prefilled by (last run's params > session-pinned values > `default`), with a "pin to this session" toggle; `select` renders as a dropdown. Agents get the same chain through `actions_set_params` pins.
+In the panel, declared inputs render as a run form prefilled by (last run's params > declared `default`); `select` renders as a dropdown. Agent parameters are explicit per run and are never secretly pinned.
 
 ## Approval requirement (`approval`)
 
@@ -179,13 +179,13 @@ Resolution rules worth knowing:
 
 Same `label` in several layers merges **field by field** (VS Code assign semantics), with priority global < workspace < session: fields a higher layer writes override the lower entry; unwritten fields are inherited. `options.env` merges per key; `options.cwd`, `runOptions.*`, `presentation.panel`, and `approval` override field-wise; `inputs` merge **by `id`** (matched inputs merge field-wise, higher-layer-only inputs append). The merged action takes the winning layer's identity (`id = <layer>:<label>`). Within one file, a later duplicate label wins.
 
-Fault tolerance is per entry: an entry missing `label`/`command` (and not inheriting `command` via `extends`) or carrying an invalid field value is skipped with a source-level error message; the rest of the file still loads. Validation errors are field-precise — the source banner's error details carry strings of the form `actions[<index>].<path>: <message>` (e.g. `actions[0].inputs[0].options: …`), so locate and fix exactly what is named. After editing, check the panel's source banner (or `actions_list`) for degradation errors.
+Fault tolerance is per entry: an entry missing `label`/`command` (and not inheriting `command` via `extends`) or carrying an invalid field value is skipped with a source-level error message; the rest of the file still loads. Validation errors are field-precise — the source banner's error details carry strings of the form `actions[<index>].<path>: <message>` (e.g. `actions[0].inputs[0].options: …`), so locate and fix exactly what is named. After editing, check the panel's source banner (or `actions_query`) for degradation errors.
 
 ## Choosing the layer
 
 - **Workspace** (`.dsh/actions.json`): anything the project shares — build/check/dev/test commands, codegen, local CI. Commit it with the repo.
 - **Global** (`~/.dsh/actions.json`): personal conveniences that should exist in every workspace. Use it sparingly; a workspace entry with the same label overrides it field by field.
-- **Session**: nothing to hand-author here — it is written by `actions_register` for session-only actions (see [operating.md](operating.md)); the panel can promote a proven session entry into a file layer.
+- **Session**: use `actions_configure` with the explicit session layer for session-only actions (see [operating.md](operating.md)); the panel can promote a proven session entry into a file layer.
 
 ## Verify before you finalize
 
@@ -228,4 +228,4 @@ Why: JSON string + shell quoting is a double-escaping trap that produces command
 2. Keep `label` short and stable — it is the merge key and the stable-id basis. Put the explanation in `detail`.
 3. For commonly used panel-visible Actions, add a semantic Iconify `icon` (prefer `lucide:` and reuse the same icon for the same purpose). Skip it for agent-only entries.
 4. Set `runOptions.instancePolicy: "reject"` for actions that must never overlap (watchers, migrators, anything stateful); set `approval` for destructive ones.
-5. Verify: `actions_list` shows the new/changed entry (respecting `visibility`), or the panel updates automatically — saving a configuration file takes effect without a manual refresh. If an entry is missing, check the source banner for a per-entry validation error.
+5. Verify: `actions_query` shows the new/changed entry (respecting `visibility`), or the panel updates automatically — saving a configuration file takes effect without a manual refresh. If an entry is missing, check the source banner for a per-entry validation error.

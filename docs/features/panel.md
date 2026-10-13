@@ -30,7 +30,7 @@
 
 ## 参数表单
 
-声明了 `inputs` 的任务在运行时渲染表单：按 上次运行参数 > 会话固定值 > `default` 三级预填，`select` 用下拉选择；「固定到本会话」勾选后运行无需逐次填写（固定值随会话销毁，不写进配置文件）。字段语义见[配置参考](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/configuration.md)，Agent 侧对应物见[会话层](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/session-layer.md)。
+声明了 `inputs` 的任务在运行时渲染表单：重跑时优先带入该次运行的显式参数，其余字段使用声明的 `default`，`select` 用下拉选择。参数不会在会话中暗中记忆；字段语义见[配置参考](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/configuration.md)。
 
 ## 实时同步
 

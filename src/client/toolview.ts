@@ -12,7 +12,6 @@ import {
   DisclosureRow,
   IconInspectOutlineRegular,
   IconListPenOutlineRegular,
-  IconPinOutlineRegular,
   IconPlayOutlineRegular,
   IconShieldOutlineRegular,
   IconStopFillRegular,
@@ -195,7 +194,7 @@ export function ActionsRunView({ block, t }: ToolViewProps): React.ReactElement 
 }
 
 // ---------------------------------------------------------------------------
-// actions_inspect
+// actions_query
 // ---------------------------------------------------------------------------
 
 interface InspectionPayload {
@@ -204,7 +203,7 @@ interface InspectionPayload {
   output?: { text?: string };
 }
 
-export function ActionsInspectView({ block, t }: ToolViewProps): React.ReactElement {
+export function ActionsQueryView({ block, t }: ToolViewProps): React.ReactElement {
   const text = textOf(block);
   const payload = jsonOf(text) as InspectionPayload | undefined;
   if (payload?.run !== undefined && payload.action !== undefined) {
@@ -236,37 +235,6 @@ export function ActionsInspectView({ block, t }: ToolViewProps): React.ReactElem
 }
 
 // ---------------------------------------------------------------------------
-// actions_list
-// ---------------------------------------------------------------------------
-
-const LIST_ROW = /^- (.+?) \((.+?)\) — (.+)$/;
-
-export function ActionsListView({ block, t }: ToolViewProps): React.ReactElement {
-  const text = textOf(block);
-  const lines = text.split('\n');
-  const header = lines[0] ?? '';
-  const rows = lines.slice(1)
-    .map((line) => LIST_ROW.exec(line))
-    .filter((match): match is RegExpExecArray => match !== null);
-  const summary = rows.length === 0 ? header : t('tvListSummary', { count: rows.length });
-  return h(ToolCard, {
-    title: t('tvList'),
-    icon: h(IconListPenOutlineRegular, { size: 14 }),
-    state: 'idle',
-    summary,
-    children: rows.length === 0
-      ? h(TextBody, { text })
-      : h('div', { className: 'dsh-actions-tv-list' },
-          ...rows.map((match) => h('div', { key: match[2], className: 'dsh-actions-tv-row' },
-            h(StateDot, { state: dotState(match[3]), size: 8 }),
-            h('span', { className: 'dsh-actions-tv-row-label' }, match[1]),
-            h('span', { className: 'dsh-actions-tv-meta' }, match[3]),
-          )),
-        ),
-  });
-}
-
-// ---------------------------------------------------------------------------
 // actions_cancel
 // ---------------------------------------------------------------------------
 
@@ -283,47 +251,18 @@ export function ActionsCancelView({ block, t }: ToolViewProps): React.ReactEleme
 }
 
 // ---------------------------------------------------------------------------
-// actions_set_params
+// actions_configure
 // ---------------------------------------------------------------------------
 
-export function ActionsSetParamsView({ block, t }: ToolViewProps): React.ReactElement {
-  const payload = jsonOf(textOf(block)) as
-    | { actionId?: string; sessionParams?: Record<string, unknown>; sessionId?: string }
-    | undefined;
-  const sessionParams = payload?.sessionParams ?? {};
-  // S4: a no-actionId list call returns the NESTED board
-  // (Record<actionId, Record<input, value>>) — group per action instead of
-  // stringifying it into [object Object].
-  const nested = Object.values(sessionParams).some((value) => typeof value === 'object' && value !== null);
-  if (nested) {
-    const groups = Object.entries(sessionParams as Record<string, Record<string, string>>);
-    const count = groups.reduce((total, [, values]) => total + Object.keys(values).length, 0);
-    const text = groups
-      .map(([actionId, values]) =>
-        `${shortLabel(actionId)}:\n${Object.entries(values)
-          .map(([key, value]) => `  ${key} = ${value}`)
-          .join('\n')}`,
-      )
-      .join('\n');
-    return h(ToolCard, {
-      title: t('tvPin'),
-      icon: h(IconPinOutlineRegular, { size: 14 }),
-      state: count === 0 ? 'idle' : 'done',
-      summary: count === 0 ? '' : t('tvListSummary', { count }),
-      children: count === 0 ? undefined : h(TextBody, { text }),
-    });
-  }
-  const actionId = typeof payload?.actionId === 'string' ? payload.actionId : '';
-  const entries = Object.entries(sessionParams as Record<string, string>);
-  const title = entries.length === 0 ? t('tvPinCleared') : `${t('tvPin')} · ${shortLabel(actionId)}`;
-  const summary = entries.map(([key, value]) => `${key}=${value}`).join('  ');
+export function ActionsConfigureView({ block }: ToolViewProps): React.ReactElement {
+  const text = textOf(block);
+  const payload = jsonOf(text) as { configured?: boolean; operation?: string; actionId?: string; reason?: string } | undefined;
+  const configured = payload?.configured === true;
   return h(ToolCard, {
-    title,
-    icon: h(IconPinOutlineRegular, { size: 14 }),
-    state: entries.length === 0 ? 'idle' : 'done',
-    summary,
-    children: entries.length === 0
-      ? undefined
-      : h(TextBody, { text: entries.map(([key, value]) => `${key} = ${value}`).join('\n') }),
+    title: `Actions · ${payload?.operation ?? 'configure'}`,
+    icon: h(IconListPenOutlineRegular, { size: 14 }),
+    state: configured ? 'done' : payload?.reason === 'approval-declined' ? 'warning' : 'idle',
+    summary: payload?.actionId ?? payload?.reason ?? text.split('\n')[0] ?? '',
+    children: h(TextBody, { text }),
   });
 }

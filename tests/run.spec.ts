@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import type { ProjectActionSummary } from '../src/contract.js';
 import { OutputRingBuffer } from '../src/host/run/buffer.js';
 import { resolveRunCapabilities } from '../src/host/run/host.js';
-import { createSessionParamStore } from '../src/host/run/session-params.js';
 import type {
   JobHooksLike,
   JobsLike,
@@ -668,7 +667,7 @@ describe('T37 conflict key encoding', () => {
   });
 });
 
-describe('RunService session param layer (T38)', () => {
+describe('RunService parameter defaults', () => {
   const PARAM_ACTION = makeAction({
     inputs: [
       { id: 'target', type: 'string', required: true },
@@ -677,51 +676,18 @@ describe('RunService session param layer (T38)', () => {
     command: 'build ${input:target} --mode ${input:mode}',
   });
 
-  it('three-level chain: explicit call > session pin > config default', async () => {
-    const shell = new FakeShell();
-    const store = createSessionParamStore();
-    const service = createRunService({ shell, pollIntervalMs: 1, sessionParams: store });
-    store.set(SESSION, PARAM_ACTION.id, { mode: 'release' });
-
-    // Pin overrides the config default.
+  it('uses explicit values over declared defaults', async () => {
+    const { service, shell } = makeService();
     await service.run(PARAM_ACTION, { workspace: WORKSPACE, sessionId: SESSION, params: { target: 'web' } });
-    expect(shell.requests[0]?.command).toBe('build web --mode release');
-
-    // Explicit call value overrides the pin.
-    store.clear(SESSION, PARAM_ACTION.id);
-    store.set(SESSION, PARAM_ACTION.id, { mode: 'release' });
-    await service.run(PARAM_ACTION, { workspace: WORKSPACE, sessionId: SESSION, params: { target: 'api', mode: 'debug' } });
-    expect(shell.requests[1]?.command).toBe('build api --mode debug');
+    expect(shell.requests[0]?.command).toBe('build web --mode debug');
+    await service.run(PARAM_ACTION, { workspace: WORKSPACE, sessionId: SESSION, params: { target: 'api', mode: 'release' } });
+    expect(shell.requests[1]?.command).toBe('build api --mode release');
     shell.processes.forEach((proc) => proc.finish(0));
   });
 
-  it('a session pin satisfies required inputs', async () => {
-    const shell = new FakeShell();
-    const store = createSessionParamStore();
-    const service = createRunService({ shell, pollIntervalMs: 1, sessionParams: store });
-    store.set(SESSION, PARAM_ACTION.id, { target: 'web' });
-
-    const result = await service.run(PARAM_ACTION, { workspace: WORKSPACE, sessionId: SESSION });
-    expect(result.kind).toBe('started');
-    if (result.kind !== 'started') return;
-    expect(result.run.params).toEqual({ target: 'web', mode: 'debug' });
-    expect(shell.requests[0]?.command).toBe('build web --mode debug');
-    shell.processes[0]?.finish(0);
-    await service.waitForSettled(result.run.id);
-  });
-
-  it('pins are strictly session-isolated', async () => {
-    const shell = new FakeShell();
-    const store = createSessionParamStore();
-    const service = createRunService({ shell, pollIntervalMs: 1, sessionParams: store });
-    store.set(SESSION, PARAM_ACTION.id, { target: 'web' });
-
-    // session-2 has no pin: required input still missing.
-    const failure = await service
-      .run(PARAM_ACTION, { workspace: WORKSPACE, sessionId: 'session-2' })
-      .catch((error: unknown) => error);
+  it('does not satisfy required inputs from hidden session state', async () => {
+    const { service } = makeService();
+    const failure = await service.run(PARAM_ACTION, { workspace: WORKSPACE, sessionId: SESSION }).catch((error: unknown) => error);
     expect((failure as RunServiceError).code).toBe('invalid-params');
-    // session-1's pin is invisible to session-2.
-    expect(store.list('session-2')).toEqual({});
   });
 });
