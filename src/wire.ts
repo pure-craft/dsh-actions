@@ -242,6 +242,10 @@ export function parseActionRunSummary(value: unknown): ActionRunSummary {
     !isRunStatus(value.status) ||
     !Number.isFinite(value.startedAt) ||
     !optionalNumber(value.finishedAt) ||
+    !optionalString(value.retryOf) ||
+    !optionalString(value.failureHint) ||
+    !(value.sandboxMode === undefined || value.sandboxMode === 'read-only' || value.sandboxMode === 'workspace-write' || value.sandboxMode === 'danger-full-access') ||
+    !(value.failureKind === undefined || value.failureKind === 'sandbox-denied' || value.failureKind === 'permission-error') ||
     !(value.exitCode === undefined || value.exitCode === null || optionalNumber(value.exitCode))
   ) {
     throw new TypeError('Invalid action run summary');

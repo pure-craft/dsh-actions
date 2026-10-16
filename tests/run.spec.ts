@@ -33,6 +33,7 @@ function makeAction(overrides: Partial<ProjectActionSummary> = {}): ProjectActio
 
 class FakeShellProcess implements ShellProcessLike {
   exitCode: number | null = null;
+  sandbox?: { mode: 'workspace-write' | 'danger-full-access'; denied: boolean };
   killed = false;
   pendingRead: Partial<ShellProcessReadLike> | undefined;
   private pending = '';
@@ -137,6 +138,59 @@ function startedRunId(result: Awaited<ReturnType<ReturnType<typeof createRunServ
 }
 
 describe('RunService lifecycle', () => {
+  it('kills a process published after cancellation during startup', async () => {
+    const proc = new FakeShellProcess();
+    let publish!: (proc: ShellProcessLike) => void;
+    const service = createRunService({ shell: { resolve: (req) => req, execute: () => new Promise((resolve) => { publish = resolve; }) } });
+    const pending = service.run(makeAction(), { workspace: WORKSPACE, sessionId: SESSION, sandboxPolicy: { mode: 'danger-full-access', workspaceRoot: WORKSPACE } });
+    service.cancel(service.listRuns()[0]!.id);
+    publish(proc);
+    const result = await pending;
+    expect(result).toMatchObject({ kind: 'started', run: { status: 'cancelled' } });
+    expect(proc.killed).toBe(true);
+  });
+
+  it('retains permission evidence after output buffer overflow', async () => {
+    const { service, shell } = makeService({ outputLimitBytes: 32 });
+    const id = startedRunId(await service.run(makeAction(), { workspace: WORKSPACE, sessionId: SESSION, sandboxPolicy: { mode: 'workspace-write', workspaceRoot: WORKSPACE } }));
+    shell.processes[0]!.finish(1, 'Operation not permitted\n' + 'x'.repeat(100));
+    expect((await service.waitForSettled(id)).failureKind).toBe('permission-error');
+    expect(service.inspect(id).output.text).not.toContain('Operation');
+  });
+
+  it('retains startup failure output and exposes its run id', async () => {
+    const { service, shell } = makeService();
+    shell.startError = new Error('Operation not permitted');
+    await expect(service.run(makeAction(), { workspace: WORKSPACE, sessionId: SESSION, sandboxPolicy: { mode: 'workspace-write', workspaceRoot: WORKSPACE } })).rejects.toMatchObject({ code: 'start-failed', runId: 'run-1' });
+    expect(service.inspect('run-1').run).toMatchObject({ status: 'failed', failureKind: 'permission-error' });
+    expect(service.inspect('run-1').output.text).toContain('Operation not permitted');
+  });
+  it.each([
+    { denied: true, output: 'blocked', expected: 'sandbox-denied' },
+    { denied: false, output: 'FETCH_HEAD: Operation not permitted', expected: 'permission-error' },
+    { denied: false, output: 'test assertion failed', expected: undefined },
+  ])('classifies permission recovery conservatively: $output', async ({ denied, output, expected }) => {
+    const { service, shell } = makeService();
+    const id = startedRunId(await service.run(makeAction(), { workspace: WORKSPACE, sessionId: SESSION, sandboxPolicy: { mode: 'workspace-write', workspaceRoot: WORKSPACE } }));
+    shell.processes[0]!.sandbox = { mode: 'workspace-write', denied };
+    shell.processes[0]!.finish(1, output);
+    const result = await service.waitForSettled(id);
+    expect(result.failureKind).toBe(expected);
+    if (expected) expect(result.failureHint).toContain(`retryRunId="${id}"`);
+    else expect(result.failureHint).toBeUndefined();
+  });
+
+  it('runs an evaluated snapshot verbatim and protects it from inspection mutations', async () => {
+    const { service, shell } = makeService();
+    const action = makeAction({ command: 'echo ${input:literal}', inputs: [{ id: 'literal', type: 'string' }], env: { VALUE: '${input:literal}' } });
+    const id = startedRunId(await service.run(action, { workspace: WORKSPACE, sessionId: SESSION, params: { literal: 'changed' }, evaluatedSnapshot: true, retryOf: 'run-old' }));
+    expect(shell.requests[0]?.command).toBe('echo ${input:literal}');
+    service.inspect(id).action.env!.VALUE = 'mutated';
+    expect(service.inspect(id).action.env?.VALUE).toBe('${input:literal}');
+    expect(service.inspect(id).run.retryOf).toBe('run-old');
+    shell.processes[0]!.finish(0);
+    await service.waitForSettled(id);
+  });
   it('starts a run through the shell without a policy when the caller passes none', async () => {
     const { service, shell } = makeService();
     const action = makeAction({ env: { NODE_ENV: 'test' } });

@@ -63,6 +63,7 @@ export interface ShellProcessReadLike {
 export interface ShellProcessLike {
   readonly done: Promise<void>;
   readonly exitCode: number | null;
+  readonly sandbox?: { mode: SandboxModeLike; denied: boolean; runnerFailed?: boolean };
   readOutput(): ShellProcessReadLike;
   kill(): boolean;
 }
@@ -109,13 +110,15 @@ export type RunServiceErrorCode = 'shell-unavailable' | 'start-failed' | 'run-no
 
 export class RunServiceError extends Error {
   override readonly name = 'RunServiceError';
+  readonly runId: string | undefined;
 
   constructor(
     readonly code: RunServiceErrorCode,
     message: string,
-    options?: { cause?: unknown },
+    options?: { cause?: unknown; runId?: string },
   ) {
     super(message, options);
+    this.runId = options?.runId;
   }
 }
 
@@ -173,6 +176,9 @@ export interface RunRequestOptions {
    * *mode* is never chosen here.
    */
   sandboxRoot?: string | undefined;
+  /** Trusted Host only: execute an already evaluated, approved snapshot verbatim. */
+  evaluatedSnapshot?: boolean;
+  retryOf?: string;
 }
 
 export interface RunListFilter {
@@ -246,6 +252,8 @@ interface RunRecord {
   proc?: ShellProcessLike | undefined;
   jobId?: string | undefined;
   settled: boolean;
+  permissionSuspected?: boolean;
+  permissionTail?: string;
   cancelRequested: boolean;
   settle: (summary: ActionRunSummary) => void;
   settledPromise: Promise<ActionRunSummary>;
@@ -384,6 +392,9 @@ export function createRunService(deps: RunServiceDeps = {}): RunService {
   }
 
   function ingest(record: RunRecord, read: ShellProcessReadLike): void {
+    const evidence = (record.permissionTail ?? '') + read.delta;
+    if (/operation not permitted|permission denied|\bEPERM\b|\bEACCES\b/i.test(evidence)) record.permissionSuspected = true;
+    record.permissionTail = evidence.slice(-64);
     if (read.lossy) {
       record.buffer.spillPath = read.stdoutSpillPath ?? read.stderrSpillPath ?? record.buffer.spillPath;
     }
@@ -430,6 +441,15 @@ export function createRunService(deps: RunServiceDeps = {}): RunService {
     }
     if (record.settled) return; // cancel won the race (first-wins)
     const exitCode = proc.exitCode;
+    if (proc.sandbox) record.summary.sandboxMode = proc.sandbox.mode;
+    if (exitCode !== 0 && record.summary.sandboxMode !== undefined && record.summary.sandboxMode !== 'danger-full-access') {
+      const denied = proc.sandbox?.denied === true;
+      const suspected = record.permissionSuspected === true;
+      if (denied || suspected) {
+        record.summary.failureKind = denied ? 'sandbox-denied' : 'permission-error';
+        record.summary.failureHint = `${denied ? 'The host reported a sandbox denial.' : 'Output suggests a permission error; this does not prove a sandbox denial.'} Inspect the output and any partial side effects. If wider access is justified, call actions_run with retryRunId="${record.summary.id}" and justification to request one-time approval. The entire original Action will run again; do not bypass approval via Bash.`;
+      }
+    }
     terminate(record, exitCode === 0 ? 'succeeded' : 'failed', exitCode);
   }
 
@@ -525,7 +545,7 @@ export function createRunService(deps: RunServiceDeps = {}): RunService {
           cause: error,
         });
       }
-      const evaluated = evaluateAction(action, options.workspace, normalized.values);
+      const evaluated = structuredClone(options.evaluatedSnapshot ? action : evaluateAction(action, options.workspace, normalized.values));
 
       // 1. Unified conflict protocol: key (sessionId, actionId, signature) —
       // the same action in the same workspace does not conflict across
@@ -584,6 +604,8 @@ export function createRunService(deps: RunServiceDeps = {}): RunService {
       // T33: the wire summary carries the resolved values when the action
       // declares inputs (actions_query shows what the run actually used).
       if (action.inputs !== undefined && action.inputs.length > 0) record.summary.params = normalized.values;
+      if (options.sandboxPolicy) record.summary.sandboxMode = options.sandboxPolicy.mode;
+      if (options.retryOf) record.summary.retryOf = options.retryOf;
       records.set(record.summary.id, record);
       emitChange(record);
 
@@ -608,11 +630,18 @@ export function createRunService(deps: RunServiceDeps = {}): RunService {
       try {
         proc = await shell.execute(shell.resolve(request));
       } catch (error) {
+        ingest(record, { delta: `Failed to start: ${errorMessage(error)}\n`, lossy: false });
+        if (record.summary.sandboxMode && record.summary.sandboxMode !== 'danger-full-access' && /sandbox|permission denied|operation not permitted|\bEPERM\b|\bEACCES\b/i.test(errorMessage(error))) {
+          record.summary.failureKind = 'permission-error';
+          record.summary.failureHint = `Startup failed with a possible permission error. Inspect run ${record.summary.id} and partial side effects before requesting actions_run with retryRunId="${record.summary.id}" and justification. A retry requires approval and re-executes the whole Action.`;
+        }
         terminate(record, 'failed', null);
-        throw new RunServiceError('start-failed', `Failed to start action "${action.label}": ${errorMessage(error)}`, {
+        throw new RunServiceError('start-failed', `Failed to start action "${action.label}" (runId: ${record.summary.id}): ${errorMessage(error)}`, {
           cause: error,
+          runId: record.summary.id,
         });
       }
+      record.proc = proc;
       if (record.settled) {
         // Cancelled while start was in flight: stop the just-published
         // process. The result still reports 'started' with the already-
@@ -620,7 +649,6 @@ export function createRunService(deps: RunServiceDeps = {}): RunService {
         killProcess(record);
         return { kind: 'started', run: copySummary(record) };
       }
-      record.proc = proc;
       transition(record, 'running');
       registerJob(record);
       void pump(record, proc);
@@ -633,7 +661,7 @@ export function createRunService(deps: RunServiceDeps = {}): RunService {
     inspect(runId) {
       const record = requireRecord(runId);
       // T37: hand out a copy of the evaluated definition, not the record's own.
-      return { run: copySummary(record), action: { ...record.action }, output: outputSnapshot(record) };
+      return { run: copySummary(record), action: structuredClone(record.action), output: outputSnapshot(record) };
     },
 
     cancel(runId, reason) {

@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { ActionEntryConfig, ActionRunSummary, ProjectActionSummary, RunStartResult } from '../src/contract.js';
 import type { RunInspection, RunListFilter, RunOutputSnapshot, RunRequestOptions, RunService } from '../src/host/run/index.js';
 import { RunServiceError } from '../src/host/run/index.js';
+import { createRunService } from '../src/host/run/service.js';
+import type { ShellExecRequestLike } from '../src/host/run/service.js';
 import type { ActionChange, ActionLayerSnapshot, ConfigurableActionLayer } from '../src/host/config/action-store.js';
 import type { ActionLayerStoreLike, ApprovalServiceLike, ToolDefinitionLike, ToolRunContextLike } from '../src/host/tools/index.js';
 import { createActionToolDefinitions } from '../src/host/tools/index.js';
@@ -13,9 +15,11 @@ function run(overrides: Partial<ActionRunSummary> = {}): ActionRunSummary { retu
 class Runs implements RunService {
   rows: ActionRunSummary[] = [];
   calls: RunRequestOptions[] = [];
+  actions: ProjectActionSummary[] = [];
+  snapshot = action();
   listRuns(filter?: RunListFilter): ActionRunSummary[] { return this.rows.filter((item) => (!filter?.workspace || item.workspace === filter.workspace) && (!filter?.actionId || item.actionId === filter.actionId) && (!filter?.sessionId || item.sessionId === filter.sessionId)); }
-  async run(_action: ProjectActionSummary, options: RunRequestOptions): Promise<RunStartResult> { this.calls.push(options); const value = run({ sessionId: options.sessionId, ...(options.params === undefined ? {} : { params: options.params }) }); this.rows.push(value); return { kind: 'started', run: value }; }
-  inspect(id: string): RunInspection { const value = this.rows.find((item) => item.id === id); if (!value) throw new RunServiceError('run-not-found', 'missing'); return { run: value, action: action({ id: value.actionId }), output: { text: 'hello', offset: 0, nextOffset: 5, truncated: false } }; }
+  async run(_action: ProjectActionSummary, options: RunRequestOptions): Promise<RunStartResult> { this.calls.push(options); this.actions.push(_action); const value = run({ sessionId: options.sessionId, ...(options.params === undefined ? {} : { params: options.params }) }); this.rows.push(value); return { kind: 'started', run: value }; }
+  inspect(id: string): RunInspection { const value = this.rows.find((item) => item.id === id); if (!value) throw new RunServiceError('run-not-found', 'missing'); return { run: value, action: { ...this.snapshot, id: value.actionId }, output: { text: 'hello', offset: 0, nextOffset: 5, truncated: false } }; }
   readOutput(id: string, offset: number): RunOutputSnapshot { this.inspect(id); return { text: 'llo', offset, nextOffset: 5, truncated: false }; }
   cancel(id: string): ActionRunSummary { const value = this.inspect(id).run; value.status = 'cancelled'; return value; }
   waitForSettled(id: string): Promise<ActionRunSummary> { return Promise.resolve(this.inspect(id).run); }
@@ -38,7 +42,7 @@ class Layers implements ActionLayerStoreLike {
 }
 function fixture(overrides: { actions?: ProjectActionSummary[]; approval?: ApprovalServiceLike; layers?: Layers } = {}) {
   const runs = new Runs(); const layers = overrides.layers ?? new Layers();
-  const definitions = createActionToolDefinitions({ catalog: { loadCatalog: async (workspace, sessionId) => ({ apiVersion: 1, workspace, sources: [], actions: overrides.actions ?? [action()], runs: runs.listRuns({ workspace, sessionId }) }) }, runs, actionLayers: layers, approval: overrides.approval });
+  const definitions = createActionToolDefinitions({ catalog: { loadCatalog: async (workspace, sessionId) => ({ apiVersion: 1, workspace, sources: [], actions: overrides.actions ?? [action()], runs: runs.listRuns({ workspace, sessionId }) }) }, runs, actionLayers: layers, approval: overrides.approval, sandboxPolicy: { resolve: ({ mode }) => ({ mode: mode ?? 'workspace-write', workspaceRoot: '/ws', sessionId: 's1' }) } });
   const get = (name: string): ToolDefinitionLike => definitions.find((item) => item.name === name)!;
   const exec: ToolRunContextLike = { agent: { id: 's1', session: { header: { cwd: '/ws' } } }, callId: 'call-1' };
   return { definitions, get, exec, runs, layers };
@@ -70,4 +74,82 @@ describe('actions_configure', () => {
   it('requires acknowledgement when delete exposes a lower layer', async () => { const { get, exec, layers } = fixture({ approval }); layers.entries.set('session:build', { label: 'build', command: 'session build' }); layers.entries.set('workspace:build', { label: 'build', command: 'workspace build' }); const first = await get('actions_configure').execute({ operation: 'delete', layer: 'session', actionId: 'session:build', expectedRevision: 'entry-rev' }, exec) as { reason: string }; expect(first.reason).toBe('fallback-ack-required'); expect(layers.entries.has('session:build')).toBe(true); await get('actions_configure').execute({ operation: 'delete', layer: 'session', actionId: 'session:build', expectedRevision: 'entry-rev', acknowledgeFallback: true }, exec); expect(layers.entries.has('session:build')).toBe(false); });
   it('fails closed without approval', async () => { const { get, exec } = fixture(); const value = await get('actions_configure').execute({ operation: 'create', layer: 'session', definition: { label: 'diag', command: 'echo ok' } }, exec) as { reason: string; outcome: string }; expect(value).toMatchObject({ reason: 'approval-declined', outcome: 'unavailable' }); });
   it('rejects cross-layer ids and missing revisions', async () => { const { get, exec, layers } = fixture({ approval }); layers.entries.set('workspace:build', { label: 'build', command: 'pnpm build' }); await rejectsCode(get('actions_configure').execute({ operation: 'update', layer: 'workspace', actionId: 'session:build', expectedRevision: 'entry-rev', changes: [{ operation: 'set-field', field: 'detail', value: 'x' }] }, exec), 'invalid-arguments'); });
+});
+
+
+describe('one-time elevated approval and retry', () => {
+  it('replays a real run-service snapshot without substituting input literals twice', async () => {
+    const requests: ShellExecRequestLike[] = [];
+    const runs = createRunService({ shell: { resolve: (req) => { requests.push(req); return req; }, execute: async () => ({ done: Promise.resolve(), exitCode: 1, readOutput: () => ({ delta: '', lossy: false }), kill: () => true }) } });
+    const definition = action({ command: 'echo ${input:value}', inputs: [{ id: 'value', type: 'string' }], env: { VALUE: '${input:value}' } });
+    const tools = createActionToolDefinitions({ runs, catalog: { loadCatalog: async () => ({ apiVersion: 1, workspace: '/ws', sources: [], actions: [definition], runs: [] }) }, approval: { request: async () => { definition.command = 'changed'; return 'allowed-once'; } }, sandboxPolicy: { resolve: ({ mode }) => ({ mode: mode ?? 'workspace-write', workspaceRoot: '/ws' }) } });
+    const tool = tools.find((item) => item.name === 'actions_run')!;
+    const exec = fixture().exec;
+    const first = await tool.execute({ actionId: definition.id, params: { value: '${input:value}' }, wait: true }, exec) as Extract<RunStartResult, { kind: 'started' }>;
+    expect(first.run.status).toBe('failed');
+    const second = await tool.execute({ retryRunId: first.run.id, justification: 'metadata access', wait: true }, exec) as Extract<RunStartResult, { kind: 'started' }>;
+    expect(second.run.retryOf).toBe(first.run.id);
+    expect(requests[1]?.command).toBe(requests[0]?.command);
+    expect(requests[1]?.env).toEqual(requests[0]?.env);
+    expect(requests[1]?.sandboxPolicy?.mode).toBe('danger-full-access');
+    runs.dispose();
+  });
+  it('does not launch when cancellation races an approved answer', async () => {
+    const controller = new AbortController();
+    const { get, exec, runs } = fixture({ actions: [action({ approval: 'always' })], approval: { request: async () => { controller.abort(); return 'allowed-once'; } } });
+    expect(await get('actions_run').execute({ actionId: 'workspace:build' }, { ...exec, signal: controller.signal })).toMatchObject({ kind: 'approval-declined', outcome: 'cancelled' });
+    expect(runs.calls).toHaveLength(0);
+  });
+  it.each(['agent', 'always'] as const)('combines %s run approval and full access into one request', async (approvalMode) => {
+    const requests: Parameters<ApprovalServiceLike['request']>[0][] = [];
+    const { get, exec, runs } = fixture({ actions: [action({ approval: approvalMode })], approval: { request: async (req) => { requests.push(req); return 'allowed-once'; } } });
+    await get('actions_run').execute({ actionId: 'workspace:build' }, exec);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.reason).toContain('danger-full-access');
+    expect(requests[0]?.reason).toContain('pnpm build');
+    expect(runs.calls[0]?.sandboxPolicy?.mode).toBe('danger-full-access');
+  });
+  it('keeps approval never sandboxed without requesting approval', async () => {
+    const { get, exec, runs } = fixture({ approval: { request: async () => { throw new Error('must not ask'); } } });
+    await get('actions_run').execute({ actionId: 'workspace:build' }, exec);
+    expect(runs.calls[0]?.sandboxPolicy?.mode).toBe('workspace-write');
+  });
+  it.each(['rejected', 'cancelled', 'unavailable'] as const)('does not execute on %s approval', async (outcome) => {
+    const { get, exec, runs } = fixture({ actions: [action({ approval: 'always' })], approval: { request: async () => outcome } });
+    expect(await get('actions_run').execute({ actionId: 'workspace:build' }, exec)).toMatchObject({ kind: 'approval-declined', outcome });
+    expect(runs.calls).toHaveLength(0);
+  });
+  it('fails closed when approval is unavailable', async () => {
+    const { get, exec, runs } = fixture({ actions: [action({ approval: 'always' })] });
+    expect(await get('actions_run').execute({ actionId: 'workspace:build' }, exec)).toMatchObject({ kind: 'approval-declined', outcome: 'unavailable' });
+    expect(runs.calls).toHaveLength(0);
+  });
+  it('retries the original snapshot even if the catalog changed, preserving params and lineage', async () => {
+    const { get, exec, runs } = fixture({ actions: [], approval: { request: async () => 'allowed-once' } });
+    runs.snapshot = action({ command: 'old command', cwd: '/ws/old', env: { TARGET: 'old' } });
+    runs.rows.push(run({ status: 'failed', sandboxMode: 'workspace-write', params: { target: 'old' } }));
+    await get('actions_run').execute({ retryRunId: 'run-1', justification: 'Git metadata is outside the worktree.' }, exec);
+    expect(runs.actions[0]).toMatchObject({ command: 'old command', cwd: '/ws/old', env: { TARGET: 'old' } });
+    expect(runs.calls[0]).toMatchObject({ retryOf: 'run-1', evaluatedSnapshot: true, params: { target: 'old' }, sandboxPolicy: { mode: 'danger-full-access' } });
+  });
+  it('does not permit cross-session retries', async () => {
+    const { get, exec, runs } = fixture(); runs.rows.push(run({ status: 'failed', sessionId: 'other' }));
+    await rejectsCode(get('actions_run').execute({ retryRunId: 'run-1', justification: 'test' }, exec), 'run-not-found');
+  });
+  it.each(['running', 'succeeded', 'cancelled'] as const)('rejects retry of %s runs', async (status) => {
+    const { get, exec, runs } = fixture(); runs.rows.push(run({ status }));
+    await rejectsCode(get('actions_run').execute({ retryRunId: 'run-1', justification: 'test' }, exec), 'invalid-arguments');
+  });
+  it('rejects mutated retry arguments and repeated escalation', async () => {
+    const { get, exec, runs } = fixture(); runs.rows.push(run({ status: 'failed', sandboxMode: 'danger-full-access' }));
+    await rejectsCode(get('actions_run').execute({ retryRunId: 'run-1', actionId: 'workspace:build', justification: 'test' }, exec), 'invalid-arguments');
+    await rejectsCode(get('actions_run').execute({ retryRunId: 'run-1', justification: 'test' }, exec), 'invalid-arguments');
+    expect(runs.calls).toHaveLength(0);
+  });
+  it('does not prompt or elevate an already active instance', async () => {
+    const { get, exec, runs } = fixture({ actions: [action({ approval: 'always' })], approval: { request: async () => { throw new Error('must not ask'); } } });
+    runs.rows.push(run());
+    expect(await get('actions_run').execute({ actionId: 'workspace:build' }, exec)).toMatchObject({ kind: 'already-running' });
+    expect(runs.calls).toHaveLength(0);
+  });
 });

@@ -14,6 +14,7 @@ DSH Actions exposes one deterministic task definition to people in the Web panel
 - Runs are session-owned. The Host never interrupts an active run implicitly; stop it with `actions_cancel` before rerunning.
 - Respect `approval-declined`; never retry or bypass approval through shell.
 - Configuration approval and execution approval are separate decisions.
+- `approval: agent/always` combines run and one-time full-access approval; `never` inherits the session sandbox. After a permission failure, inspect output and side effects, then use `actions_run` with `retryRunId` + `justification` for approved snapshot replay. Never bypass a declined approval.
 - Never persist secrets in input defaults or environment values.
 - All `actions_*` tools are bound to the calling session workspace and expose the same catalog as its Actions panel. They cannot target another workspace; editing files in a nested repository does not change the session workspace.
 

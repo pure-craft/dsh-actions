@@ -26,6 +26,20 @@ The result of `actions_run` is a discriminated union: `started` (new instance), 
 
 For a task with `approval: "agent"` or `"always"`, an agent calling `actions_run` asks the user first, through the host's approval channel; the answer comes back as `approval-declined` (`rejected` / `cancelled` / `unavailable` — the last means the deployment has no approval channel, in which case it fails closed). The agent's correct posture is to respect the refusal: no automatic retry, no shell detour. `actions_configure` likewise always requires approval (an agent authoring an executable command for itself is high-risk by definition).
 
+
+### One-time elevation and failure retry
+
+- `approval: never`: inherit the session sandbox, with no automatic elevation.
+- `approval: agent/always`: evaluate parameters first; show the actual command, directory and one-time `danger-full-access` in one combined approval. The session policy is unchanged. Rejected, cancelled or unavailable approval starts nothing.
+- Failure summaries record `sandboxMode`. `failureKind: sandbox-denied` means the Host reported a denial; `permission-error` means output only suggests a permission problem, not a confirmed sandbox denial. `failureHint` provides recovery guidance; ordinary business failures do not recommend elevation.
+- Inspect output and partial side effects first, then request a retry as below. Do not combine it with `actionId` or `params`. Only retained failed runs in this session and workspace are eligible; runs already using full access cannot be escalated again.
+
+```json
+{ "retryRunId": "run-3", "justification": "git fetch needs worktree Git metadata outside the workspace; verified the previous attempt did not create an MR", "wait": true }
+```
+
+Retries reuse the original evaluated command, directory, Action environment overrides and parameters, without reading the current catalog or substituting variables again. Script contents and the inherited Host environment are not frozen. Every retry requires a new approval and executes the entire Action; the new run links to the failed record through `retryOf`. Records are memory-only; evicted records and records from before a Host restart cannot be retried. Normal conflict rules apply; active instances are never stopped implicitly.
+
 ## Composer integration
 
 - **Referencing**: typing `/` in the composer opens a menu to pick a task (candidates carry the `actions:` prefix), inserting a `☰ actions:<label>` chip; the @ button on a panel row inserts the same reference token. On send, the codec expands the chip into an **action brief** — "use Action `<label>` (id: …). Required: … (select options)" — which is what lets the agent call it precisely (the full command text is available afterwards via `actions_query`). Referencing a panel-only task (`visibility: ui`) explicitly tells the agent it cannot run it and should hand it back to the user.

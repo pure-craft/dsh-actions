@@ -165,6 +165,8 @@ In the panel, declared inputs render as a run form prefilled by (last run's para
 
 A declined approval returns `approval-declined` (with outcome `rejected` / `cancelled` / `unavailable`) and starts nothing — this is distinct from the conflict protocol's `rejected`, where an instance already exists. `unavailable` means the deployment has no approval channel: the action fails closed rather than skipping the gate.
 
+Agent execution with `approval: agent/always` combines run confirmation with explicit one-time `danger-full-access` authorization. `never` inherits the session sandbox. Approval never changes session policy. For permission recovery, see operating.md: `actions_run` accepts `retryRunId` and `justification` for an approved replay of the original failed snapshot.
+
 ## Inheritance (`extends`)
 
 An entry may carry `extends: "<layer>:<label>"` to inherit another action's definition as its base: the base's `command`, `options`, `inputs`, `runOptions`, etc. apply, and fields the entry writes itself win (an extends entry may even omit `command` — it inherits the base's). Typical use: a session-layer variant that pins a workspace action's behavior without copying it.

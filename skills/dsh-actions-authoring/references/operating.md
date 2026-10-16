@@ -24,6 +24,20 @@ Parameter precedence is **explicit `actions_run.params` > declared input `defaul
 
 Different normalized parameter values have different conflict signatures. Stop-and-rerun is always two explicit calls: cancel, then run.
 
+
+### One-time elevation and failure retry
+
+- `approval: never`: inherit the session sandbox, with no automatic elevation.
+- `approval: agent/always`: evaluate parameters first; show the actual command, directory and one-time `danger-full-access` in one combined approval. The session policy is unchanged. Rejected, cancelled or unavailable approval starts nothing.
+- Failure summaries record `sandboxMode`. `failureKind: sandbox-denied` means the Host reported a denial; `permission-error` means output only suggests a permission problem, not a confirmed sandbox denial. `failureHint` provides recovery guidance; ordinary business failures do not recommend elevation.
+- Inspect output and partial side effects first, then request a retry as below. Do not combine it with `actionId` or `params`. Only retained failed runs in this session and workspace are eligible; runs already using full access cannot be escalated again.
+
+```json
+{ "retryRunId": "run-3", "justification": "git fetch needs worktree Git metadata outside the workspace; verified the previous attempt did not create an MR", "wait": true }
+```
+
+Retries reuse the original evaluated command, directory, Action environment overrides and parameters, without reading the current catalog or substituting variables again. Script contents and the inherited Host environment are not frozen. Every retry requires a new approval and executes the entire Action; the new run links to the failed record through `retryOf`. Records are memory-only; evicted records and records from before a Host restart cannot be retried. Normal conflict rules apply; active instances are never stopped implicitly.
+
 ## Configuring definitions
 
 All `actions_*` tools are bound to the calling session workspace and expose the same catalog as its Actions panel. They have no `workspace` argument and cannot query, run, or configure another workspace. Editing files in a nested repository does not change the session workspace; switch to a session for that workspace, or select it as a folder source when that support is available.

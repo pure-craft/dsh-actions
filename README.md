@@ -35,7 +35,7 @@ VS Code Tasks 的答案是「不用离开编辑器」。DSH Actions 更进一步
 
 高危任务还有一层 VS Code Tasks 没有的东西：**审批闸门**——标记过的任务，无论人点还是 Agent 调，都要经过你的显式确认才会启动。
 
-执行权限按入口区分：你在面板中手动运行时，行为与 VS Code Tasks 类似，以 DSH Host 所属用户的本机权限执行；这会绕过 DSH 文件沙箱（但不会绕过操作系统权限），因此应把仓库中的 Action 视为可执行的本机代码。Agent 通过 `actions_run` 调用时继承当前会话沙箱。两者共用同一份定义、审批、运行状态和日志，但 Agent 不会继承人工运行的本机权限。Web 面板及其同源插件代码属于同一受信任客户端边界；`approval` 是防误触确认，不是抵御已被攻陷客户端的安全隔离。
+执行权限按入口区分：你在面板中手动运行时，行为与 VS Code Tasks 类似，以 DSH Host 所属用户的本机权限执行；这会绕过 DSH 文件沙箱（但不会绕过操作系统权限），因此应把仓库中的 Action 视为可执行的本机代码。Agent 通过 `actions_run` 调用时，`approval: never` 默认继承会话沙箱；`approval: agent/always` 使用一次合并审批，明确授权运行及本次 `danger-full-access`，批准后以本机用户权限执行，不改变会话权限。权限失败可通过 `actions_run` 的 `retryRunId` + `justification` 申请提权重试，无需绕回 Bash。两者共用定义、运行状态和日志，Agent 不能未经审批获得额外权限。Web 面板及其同源插件代码属于同一受信任客户端边界；`approval` 是防误触确认，不是抵御已被攻陷客户端的安全隔离。
 
 配置的唯一来源是独立的 `actions.json`（JSONC）——不提供、也不计划提供对其他任务格式的运行时导入或桥接。
 

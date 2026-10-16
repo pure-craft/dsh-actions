@@ -274,6 +274,13 @@ export interface ActionRunSummary {
   startedAt: number;
   finishedAt?: number;
   exitCode?: number | null;
+  /** Actual per-run execution boundary; never changes the session policy. */
+  sandboxMode?: 'read-only' | 'workspace-write' | 'danger-full-access';
+  /** Original failed run when explicitly retried after approval. */
+  retryOf?: string;
+  failureKind?: 'sandbox-denied' | 'permission-error';
+  /** Recovery guidance, not an authorization grant. */
+  failureHint?: string;
 }
 
 /**

@@ -6,7 +6,7 @@ import { isInsideOrEqual } from '../config/paths.js';
 import type { ActionChange, ActionLayerSnapshot, ConfigurableActionLayer } from '../config/action-store.js';
 import { ActionStoreError } from '../config/action-store.js';
 import { evaluateAction, RunServiceError } from '../run/service.js';
-import type { RunInspection, RunService, SandboxExecutionPolicyLike } from '../run/service.js';
+import type { RunInspection, RunRequestOptions, RunService, SandboxExecutionPolicyLike } from '../run/service.js';
 
 export interface TextBlockLike { type: 'text'; text: string }
 export interface ToolAgentLike { readonly id: string; readonly session?: { readonly header?: { readonly cwd?: string } } }
@@ -15,7 +15,7 @@ export interface ToolOutputDefinitionLike { readonly schema: Record<string, unkn
 export interface ToolDefinitionLike { readonly name: string; readonly description: string; readonly parameters: Record<string, unknown>; readonly output: ToolOutputDefinitionLike; execute(args: unknown, exec: ToolRunContextLike): Promise<unknown>; isConcurrencySafe?(args: unknown): boolean }
 export interface ToolsLike { register(definition: ToolDefinitionLike): () => void }
 export interface ActionCatalogProvider { loadCatalog(workspace: string, sessionId?: string): Promise<ActionsCatalog> }
-export interface SandboxPolicyResolverLike { resolve(scope: { session?: unknown }): SandboxExecutionPolicyLike | undefined }
+export interface SandboxPolicyResolverLike { resolve(scope: { session?: unknown; mode?: SandboxExecutionPolicyLike['mode'] }): SandboxExecutionPolicyLike | undefined }
 export type ApprovalOutcomeLike = 'allowed-once' | 'rejected' | 'cancelled' | 'unavailable';
 export interface ApprovalServiceLike { request(request: { agent: ToolAgentLike; toolName: string; callId?: string; reason?: string; signal?: AbortSignal }): Promise<ApprovalOutcomeLike> }
 export interface ActionLayerStoreLike {
@@ -47,7 +47,17 @@ function renderJson(value: unknown): TextBlockLike[] { return text(JSON.stringif
 function paramsEqual(left: Record<string, string> | undefined, right: Record<string, string>): boolean { const given = left ?? {}; return [...new Set([...Object.keys(given), ...Object.keys(right)])].every((key) => (given[key] ?? '') === (right[key] ?? '')); }
 function conflictPrecheck(deps: ActionToolsDeps, action: ProjectActionSummary, sessionId: string, values: Record<string, string>): RunStartResult | undefined { const limit = Number.isFinite(action.runOptions.instanceLimit) ? Math.max(1, Math.floor(action.runOptions.instanceLimit)) : 1; const active = deps.runs.listRuns({ sessionId, actionId: action.id }).filter((run) => !isTerminal(run.status) && paramsEqual(run.params, values)); const existing = active.at(-1); if (!existing || active.length < limit) return undefined; return action.runOptions.instancePolicy === 'reject' ? { kind: 'rejected', reason: 'exclusive', run: existing } : { kind: 'already-running', run: existing }; }
 function enrichParamsError(message: string, action: ProjectActionSummary): string { const inputs = action.inputs ?? []; return inputs.length === 0 ? message : `${message} Declared inputs: ${inputs.map((input) => `${input.id}${input.required ? ' (required)' : ''}`).join(', ')}.`; }
-async function requestRunApproval(deps: ActionToolsDeps, action: ProjectActionSummary, evaluated: ProjectActionSummary, values: Record<string, string>, exec: ToolRunContextLike, agent: ToolAgentLike): Promise<Extract<RunStartResult, { kind: 'approval-declined' }> | undefined> { if (action.approval === 'never') return undefined; if (!deps.approval) return { kind: 'approval-declined', actionId: action.id, outcome: 'unavailable' }; const outcome = await deps.approval.request({ agent, toolName: 'actions_run', ...(exec.callId === undefined ? {} : { callId: exec.callId }), reason: `运行项目任务「${action.label}」（${action.id}）\n命令：${evaluated.command}\n目录：${evaluated.cwd}${Object.keys(values).length ? `\n参数：${Object.entries(values).map(([key, value]) => `${key}=${value}`).join(', ')}` : ''}`, ...(exec.signal === undefined ? {} : { signal: exec.signal }) }); return outcome === 'allowed-once' ? undefined : { kind: 'approval-declined', actionId: action.id, outcome }; }
+async function requestRunApproval(deps: ActionToolsDeps, action: ProjectActionSummary, values: Record<string, string>, exec: ToolRunContextLike, agent: ToolAgentLike, retry?: { runId: string; justification: string }): Promise<Extract<RunStartResult, { kind: 'approval-declined' }> | undefined> {
+  if (!deps.approval || !deps.sandboxPolicy) return { kind: 'approval-declined', actionId: action.id, outcome: 'unavailable' };
+  const outcome = await deps.approval.request({
+    agent, toolName: 'actions_run',
+    ...(exec.callId === undefined ? {} : { callId: exec.callId }),
+    reason: `运行项目任务「${action.label}」（${action.id}）\n命令：${action.command}\n目录：${action.cwd}\n权限：danger-full-access，仅本次运行使用 Host 本机用户权限，绕过 DSH 文件沙箱；不改变会话权限，不绕过操作系统权限。${Object.keys(values).length ? `\n参数：${Object.entries(values).map(([key, value]) => `${key}=${value}`).join(', ')}` : ''}${retry ? `\n重试原运行：${retry.runId}\n原因：${retry.justification}\n将重新执行整个 Action；原运行可能已产生部分副作用。` : ''}`,
+    ...(exec.signal === undefined ? {} : { signal: exec.signal }),
+  });
+  if (exec.signal?.aborted) return { kind: 'approval-declined', actionId: action.id, outcome: 'cancelled' };
+  return outcome === 'allowed-once' ? undefined : { kind: 'approval-declined', actionId: action.id, outcome };
+}
 
 const LAYER_SCHEMA = { type: 'string', enum: ['global', 'workspace', 'session'] } as const;
 
@@ -64,8 +74,83 @@ function createQueryTool(deps: ActionToolsDeps): ToolDefinitionLike {
     } };
 }
 
-function createRunTool(deps: ActionToolsDeps): ToolDefinitionLike { return { name: 'actions_run', description: 'Start an Action returned by actions_query. params apply only to this run; omitted values fall back to inputs[].default, and a missing required input fails. There are no pinned session parameters. Returns started, already-running, rejected, or approval-declined. Agent runs inherit the calling session sandbox. This tool never stops an active instance implicitly: inspect it with actions_query kind "run", and cancel only with actions_cancel. Set wait for short tasks; it is capped at 60 seconds.', parameters: { type: 'object', properties: { actionId: { type: 'string', description: 'Action id returned by actions_query.' }, params: { type: 'object', additionalProperties: { type: 'string' }, description: 'Input values for this run only.' }, wait: { type: 'boolean', description: 'Wait up to 60 seconds for terminal status.' } }, required: ['actionId'], additionalProperties: false }, output: { schema: { type: 'object' }, render: (_args, value) => renderJson(value) },
-  async execute(args, exec) { const record = asRecord(args); const agent = requireSessionAgent(exec); const actionId = requiredString(record, 'actionId'); const params = optionalStringMap(record, 'params'); const workspace = resolveWorkspace(exec); const action = findVisibleAction(await visibleActions(deps, workspace, agent.id), actionId); if (action.extends) throw new ActionToolError('unknown-extends', `Action "${action.label}" extends unknown action "${action.extends}".`); let normalized; try { normalized = normalizeParams(action.inputs, params); } catch (error) { throw new ActionToolError('invalid-params', enrichParamsError(`Action "${action.label}": ${error instanceof Error ? error.message : String(error)}`, action)); } const evaluated = evaluateAction(action, workspace, normalized.values); const maybeWait = async (result: RunStartResult): Promise<RunStartResult> => { if (record.wait !== true || (result.kind !== 'started' && result.kind !== 'already-running')) return result; const settled = await Promise.race([deps.runs.waitForSettled(result.run.id), new Promise<ActionRunSummary>((resolve) => setTimeout(() => resolve(deps.runs.inspect(result.run.id).run), 60_000))]); return { ...result, run: settled }; }; const conflict = conflictPrecheck(deps, action, agent.id, normalized.values); if (conflict) return maybeWait(conflict); const declined = await requestRunApproval(deps, action, evaluated, normalized.values, exec, agent); if (declined) return declined; const options: { workspace: string; sessionId: string; owner: ToolAgentLike; params: Record<string, string>; sandboxPolicy?: SandboxExecutionPolicyLike; sandboxRoot?: string } = { workspace, sessionId: agent.id, owner: agent, params: normalized.values }; const policy = deps.sandboxPolicy?.resolve({ session: agent.session }); if (policy) options.sandboxPolicy = policy; if (action.folder && !isInsideOrEqual(workspace, action.folder)) options.sandboxRoot = action.folder; try { return await maybeWait(await deps.runs.run(action, options)); } catch (error) { if (error instanceof RunServiceError && error.code === 'invalid-params') throw new ActionToolError('invalid-params', enrichParamsError(error.message, action)); mapRunServiceError(error); } } } }
+function createRunTool(deps: ActionToolsDeps): ToolDefinitionLike {
+  return {
+    name: 'actions_run',
+    description: 'Start an Action returned by actions_query using actionId and optional params. There are no pinned session parameters. approval agent/always requests one combined run and danger-full-access approval; approval=never inherits the session sandbox. To retry a failed session-owned run with one-time elevated approval, pass retryRunId and justification instead of actionId/params. Inspect output and partial side effects first. Retry reuses the original evaluated command/cwd/env/params snapshot, not the current catalog. Rejected approval must not be bypassed. Never implicitly stops active runs. wait is capped at 60 seconds.',
+    parameters: {
+      type: 'object',
+      properties: {
+        actionId: { type: 'string', description: 'Action id returned by actions_query; mutually exclusive with retryRunId.' },
+        params: { type: 'object', additionalProperties: { type: 'string' }, description: 'Initial run inputs only.' },
+        retryRunId: { type: 'string', description: 'Failed run owned by this session. Replays its snapshot after elevated approval.' },
+        justification: { type: 'string', description: 'Why this failed run needs wider access; required with retryRunId.' },
+        wait: { type: 'boolean', description: 'Wait up to 60 seconds for terminal status.' },
+      },
+      additionalProperties: false,
+    },
+    output: { schema: { type: 'object' }, render: (_args, value) => renderJson(value) },
+    async execute(args, exec) {
+      const record = asRecord(args);
+      const agent = requireSessionAgent(exec);
+      const workspace = resolveWorkspace(exec);
+      const retryRunId = optionalString(record, 'retryRunId');
+      let action: ProjectActionSummary;
+      let values: Record<string, string>;
+      let retry: { runId: string; justification: string } | undefined;
+      if (retryRunId !== undefined) {
+        if (record.actionId !== undefined || record.params !== undefined) throw new ActionToolError('invalid-arguments', 'retryRunId cannot be combined with actionId or params.');
+        const justification = requiredString(record, 'justification');
+        if (!justification.trim()) throw new ActionToolError('invalid-arguments', 'justification must explain why wider access is needed.');
+        const original = ownedInspection(deps, retryRunId, agent.id);
+        if (original.run.workspace !== workspace) throw new ActionToolError('run-not-found', `Unknown action run: ${retryRunId}`);
+        if (original.run.status !== 'failed') throw new ActionToolError('invalid-arguments', 'Only failed runs may be retried with elevated approval.');
+        if (original.action.visibility === 'ui') throw new ActionToolError('action-not-found', 'UI-only runs cannot be retried by an Agent.');
+        if (original.run.sandboxMode === 'danger-full-access') throw new ActionToolError('invalid-arguments', 'This run already used full access; inspect the actual failure instead of escalating again.');
+        action = structuredClone(original.action);
+        values = { ...original.run.params };
+        retry = { runId: retryRunId, justification };
+      } else {
+        if (record.justification !== undefined) throw new ActionToolError('invalid-arguments', 'justification requires retryRunId.');
+        const definition = structuredClone(findVisibleAction(await visibleActions(deps, workspace, agent.id), requiredString(record, 'actionId')));
+        if (definition.extends) throw new ActionToolError('unknown-extends', `Action "${definition.label}" extends unknown action "${definition.extends}".`);
+        try { values = normalizeParams(definition.inputs, optionalStringMap(record, 'params')).values; }
+        catch (error) { throw new ActionToolError('invalid-params', enrichParamsError(`Action "${definition.label}": ${error instanceof Error ? error.message : String(error)}`, definition)); }
+        action = structuredClone(evaluateAction(definition, workspace, values));
+      }
+      const maybeWait = async (result: RunStartResult): Promise<RunStartResult> => {
+        if (record.wait !== true || (result.kind !== 'started' && result.kind !== 'already-running')) return result;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          const settled = await Promise.race([deps.runs.waitForSettled(result.run.id), new Promise<ActionRunSummary>((resolve) => { timer = setTimeout(() => resolve(deps.runs.inspect(result.run.id).run), 60_000); })]);
+          return { ...result, run: settled };
+        } finally { clearTimeout(timer); }
+      };
+      const conflict = conflictPrecheck(deps, action, agent.id, values);
+      if (conflict) return maybeWait(conflict);
+      const elevated = retry !== undefined || action.approval !== 'never';
+      if (elevated) {
+        const declined = await requestRunApproval(deps, action, values, exec, agent, retry);
+        if (declined) return declined;
+      }
+      if (exec.signal?.aborted) return { kind: 'approval-declined', actionId: action.id, outcome: 'cancelled' };
+      const options: RunRequestOptions = { workspace, sessionId: agent.id, owner: agent, params: values, evaluatedSnapshot: true };
+      const policy = deps.sandboxPolicy?.resolve({ session: agent.session, ...(elevated ? { mode: 'danger-full-access' as const } : {}) });
+      if (elevated && policy?.mode !== 'danger-full-access') return { kind: 'approval-declined', actionId: action.id, outcome: 'unavailable' };
+      if (policy) options.sandboxPolicy = policy;
+      if (retry) options.retryOf = retry.runId;
+      if (action.folder && !isInsideOrEqual(workspace, action.folder)) options.sandboxRoot = action.folder;
+      try { return await maybeWait(await deps.runs.run(action, options)); }
+      catch (error) {
+        if (error instanceof RunServiceError && error.code === 'start-failed' && error.runId) {
+          try { return { kind: 'started', run: ownedInspection(deps, error.runId, agent.id).run }; }
+          catch { /* A zero-retention deployment may already have evicted it. */ }
+        }
+        mapRunServiceError(error);
+      }
+    },
+  };
+}
 
 function createCancelTool(deps: ActionToolsDeps): ToolDefinitionLike { return { name: 'actions_cancel', description: 'Request cancellation of a run owned by the calling session. Use a runId returned by actions_run or actions_query. Calling it for a finished run is safe and returns the final summary. It cannot cancel another session, start a replacement run, or delete retained output.', parameters: { type: 'object', properties: { runId: { type: 'string' } }, required: ['runId'], additionalProperties: false }, output: { schema: { type: 'object' }, render: (_args, value) => renderJson(value) }, async execute(args, exec) { const agent = requireSessionAgent(exec); const runId = requiredString(asRecord(args), 'runId'); ownedInspection(deps, runId, agent.id); try { return deps.runs.cancel(runId, 'actions_cancel tool call'); } catch (error) { mapRunServiceError(error); } } }; }
 

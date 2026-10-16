@@ -21,7 +21,7 @@ The top level may also contain session-only `folders: string[]`: it loads each l
 | Field | Required | Meaning |
 | --- | --- | --- |
 | `label` | yes | display name; also the cross-layer merge key and the basis of the stable id (`<layer>:<label>`) |
-| `command` | yes (may be omitted on an `extends` entry, which inherits the base definition) | shell command, run through `shell -c` inside the workspace sandbox boundary; may reference `${input:id}` |
+| `command` | yes (may be omitted on an `extends` entry, which inherits the base definition) | shell command, run through `shell -c` under the entry- and approval-selected permissions; may reference `${input:id}` |
 | `detail` | no | one-line description, shown in the panel and by `actions_query` alike — **the agent judges whether a task fits by this line, so always write it** |
 | `visibility` | no | `all` (default, panel + agent) / `ui` (panel only) / `agent` (agent tools only) |
 | `approval` | no | `never` (default) / `agent` / `always` — the approval requirement before a run, see below |
@@ -54,7 +54,9 @@ Two rules matter: **substitution is literal — no quoting, no escaping** (if a 
 - `agent`: an agent tool call asks the user first, through the host's approval channel; the panel is unaffected.
 - `always`: the agent asks; the panel additionally shows a confirmation dialog (an acknowledge checkbox) before running.
 
-If the user declines, the result is `approval-declined` (no instance is started). Anything irreversible — deleting data, deploying, writing to external systems — must be marked `agent` or `always`. Approval happens before parameter evaluation.
+If the user declines, the result is `approval-declined` (no instance is started). Anything irreversible — deleting data, deploying, writing to external systems — must be marked `agent` or `always`. Parameters are evaluated before approval so it shows the actual execution.
+
+For Agent calls, `never` inherits the session sandbox; `agent/always` explicitly requests one-time `danger-full-access` in the same approval, without changing session policy. Permission failures can request new approval through `actions_run` with `retryRunId` and `justification`.
 
 ## `presentation.panel` (presentation mode)
 

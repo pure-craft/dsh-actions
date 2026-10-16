@@ -21,7 +21,7 @@ Action 定义的唯一来源是独立的 `actions.json`（**JSONC**：允许注�
 | 字段 | 必备 | 含义 |
 | --- | --- | --- |
 | `label` | 是 | 展示名；也是跨层合并键与稳定 id（`<layer>:<label>`）的基础 |
-| `command` | 是（`extends` 条目可省略，继承基定义） | Shell 命令，经 `shell -c` 在工作区沙箱边界内执行；可引用 `${input:id}` |
+| `command` | 是（`extends` 条目可省略，继承基定义） | Shell 命令，经 `shell -c` 按入口与审批决定的权限执行；可引用 `${input:id}` |
 | `detail` | 否 | 一行描述，面板与 `actions_query` 都展示——Agent 靠它判断任务是否合用，务必写 |
 | `visibility` | 否 | `all`（默认，面板+Agent）/ `ui`（仅面板）/ `agent`（仅 Agent 工具） |
 | `approval` | 否 | `never`（默认）/ `agent` / `always`——运行前的审批要求，见下文 |
@@ -54,7 +54,9 @@ Action 定义的唯一来源是独立的 `actions.json`（**JSONC**：允许注�
 - `agent`：Agent 工具调用先经宿主审批通道向用户询问；面板不受影响。
 - `always`：Agent 询问；面板额外弹确认对话框（勾选 acknowledge）后才运行。
 
-用户拒绝时返回 `approval-declined`（不启动任何实例）。删除数据、部署、写外部系统等不可逆操作必须标 `agent` 或 `always`。审批先于参数求值。
+用户拒绝时返回 `approval-declined`（不启动任何实例）。删除数据、部署、写外部系统等不可逆操作必须标 `agent` 或 `always`。参数先求值，审批展示实际执行内容。
+
+Agent 入口中，`never` 继承会话沙箱；`agent/always` 的审批明确包含本次 `danger-full-access`，批准后仅本次扩权，不改变会话策略。权限失败可以通过 `actions_run` 的 `retryRunId` 与 `justification` 重新申请审批。
 
 ## presentation.panel（呈现档）
 

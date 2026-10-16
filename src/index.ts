@@ -136,7 +136,7 @@ export function apply(ctx: HostContext, internals: ApplyInternals = {}): void {
 
   // Agent tools share the same catalog and run lifecycle as the Web entry,
   // while selecting a different execution policy at their trusted Host entry.
-  // Agent runs inherit the calling session sandbox; manual Web runs are fixed
+  // Agent runs inherit the session sandbox unless explicitly approved for one-time elevation; manual Web runs are fixed
   // below to local-user execution and cannot choose that mode in request data.
   const sandboxPolicy = ctx.get('sandboxPolicy');
   const sandboxPolicyResolver = isSandboxPolicyResolverLike(sandboxPolicy) ? sandboxPolicy : undefined;

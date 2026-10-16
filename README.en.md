@@ -37,6 +37,8 @@ Output is more than text: it streams live into the run tab workspace with a stat
 
 High-risk tasks get something VS Code Tasks has no equivalent for: an **approval gate**. A task marked for approval starts only after your explicit confirmation — whether a person clicked it or an agent called it.
 
+Execution permissions depend on the entry point. Manual panel runs use the Host's local-user permissions (outside the DSH file sandbox, not outside OS permissions). Agent runs with `approval: never` inherit the session sandbox. With `approval: agent/always`, one combined approval explicitly authorizes the run and one-time `danger-full-access`, without changing the session policy. Permission failures can be retried inside Actions using `retryRunId` and `justification`, after approval; no Bash detour is needed. The Web panel and same-origin plugins share a trusted client boundary; UI confirmation is not isolation against a compromised client.
+
 The single source of configuration is a standalone `actions.json` (JSONC). There is no runtime importer or bridge for other task formats, and none planned.
 
 > **Status**: when a new session starts, concise summaries of callable Actions and the roles of the four `actions_*` tools automatically enter runtime context; full commands, parameter details, and run output remain progressively disclosed through `actions_query`. What is still missing is triggering a run directly from the composer and splicing the result back into the conversation.
