@@ -81,13 +81,16 @@ export interface AgentLike {
 export interface JobOutcomeLike {
   status: 'completed' | 'killed' | 'failed';
   detail?: string | undefined;
-  output?: string | undefined;
+  result?: string | undefined;
 }
 
 export interface JobHooksLike {
   cancel(reason?: string): void;
   done: Promise<JobOutcomeLike>;
-  readOutput?(): string;
+}
+
+export interface JobOutputSourceLike {
+  read(fromByte: number): { text: string; nextOffset: number; lossy: boolean; spillPath?: string };
 }
 
 /** Mirrors the subset of `ctx.jobs` the run service consumes. */
@@ -96,10 +99,11 @@ export interface JobsLike {
     kind: 'bash';
     label: string;
     outputLimitBytes?: number | undefined;
-    owner?: AgentLike | undefined;
+    owner?: string | undefined;
+    output?: readonly JobOutputSourceLike[];
     run(): JobHooksLike;
   }): string;
-  kill(id: string, caller?: AgentLike, reason?: string): 'requested' | 'already-finished';
+  kill(id: string, caller?: string, reason?: string): 'requested' | 'already-finished';
 }
 
 // ---------------------------------------------------------------------------
@@ -156,7 +160,13 @@ export interface RunRequestOptions {
    * conflict key, so distinct values never conflict.
    */
   params?: Record<string, string> | undefined;
-  /** Owning agent, forwarded to `ctx.jobs` for owner fencing. */
+  /**
+   * Manual completion delivery: false keeps this run solely in the Actions
+   * executor; true or omission also registers it with Host Jobs for reporting.
+   * Agent callers omit this option to preserve their existing behavior.
+   */
+  notifyAgent?: boolean;
+  /** Legacy caller metadata; Jobs fencing always uses `sessionId`, not this Agent object. */
   owner?: AgentLike | undefined;
   /**
    * Execution policy selected by the trusted Host entry: Agent tools resolve
@@ -248,7 +258,8 @@ interface RunRecord {
   /** Canonical params signature (T33); joins the conflict key. */
   signature: string;
   buffer: OutputRingBuffer;
-  owner?: AgentLike | undefined;
+  /** A shell gap has no recoverable byte count; retain its lossy provenance. */
+  outputLossy?: boolean;
   proc?: ShellProcessLike | undefined;
   jobId?: string | undefined;
   settled: boolean;
@@ -396,6 +407,7 @@ export function createRunService(deps: RunServiceDeps = {}): RunService {
     if (/operation not permitted|permission denied|\bEPERM\b|\bEACCES\b/i.test(evidence)) record.permissionSuspected = true;
     record.permissionTail = evidence.slice(-64);
     if (read.lossy) {
+      record.outputLossy = true;
       record.buffer.spillPath = read.stdoutSpillPath ?? read.stderrSpillPath ?? record.buffer.spillPath;
     }
     const appended = record.buffer.append(read.delta);
@@ -424,7 +436,7 @@ export function createRunService(deps: RunServiceDeps = {}): RunService {
     terminate(record, 'cancelled', null);
     if (killJob && record.jobId !== undefined && deps.jobs !== undefined) {
       try {
-        deps.jobs.kill(record.jobId, record.owner, reason ?? 'actions_cancel');
+        deps.jobs.kill(record.jobId, record.sessionId, reason ?? 'actions_cancel');
       } catch {
         // best-effort: process kill below still stops the work
       }
@@ -472,14 +484,14 @@ export function createRunService(deps: RunServiceDeps = {}): RunService {
       void record.settledPromise.then((summary) => {
         const output = record.buffer.snapshot();
         if (summary.status === 'succeeded') {
-          resolve({ status: 'completed', output: output.text });
+          resolve({ status: 'completed', result: output.text });
         } else if (summary.status === 'cancelled') {
-          resolve({ status: 'killed', output: output.text });
+          resolve({ status: 'killed', result: output.text });
         } else {
           resolve({
             status: 'failed',
             detail: `Action exited with code ${summary.exitCode ?? 'unknown'}`,
-            output: output.text,
+            result: output.text,
           });
         }
       });
@@ -489,13 +501,26 @@ export function createRunService(deps: RunServiceDeps = {}): RunService {
         kind: 'bash',
         label: `action: ${record.action.label}`,
         outputLimitBytes,
-        owner: record.owner,
+        owner: record.sessionId,
+        // Jobs owns an independent pull cursor. Never consume shell.readOutput
+        // here: the plugin pump remains the sole reader, also on older shells
+        // without observed streams. Retention and offsets stay plugin-owned.
+        output: [{
+          read: (fromByte) => {
+            const snapshot = record.buffer.read(fromByte);
+            return {
+              text: snapshot.text,
+              nextOffset: snapshot.nextOffset,
+              lossy: snapshot.truncated || record.outputLossy === true,
+              ...(record.buffer.spillPath === undefined ? {} : { spillPath: record.buffer.spillPath }),
+            };
+          },
+        }],
         run: () => ({
           cancel: (reason?: string) => {
             cancelRecord(record, reason, false);
           },
           done: jobDone,
-          readOutput: () => record.buffer.snapshot().text,
         }),
       });
     } catch {
@@ -595,7 +620,6 @@ export function createRunService(deps: RunServiceDeps = {}): RunService {
         sessionId: options.sessionId,
         signature: normalized.signature,
         buffer: new OutputRingBuffer(outputLimitBytes),
-        owner: options.owner,
         settled: false,
         cancelRequested: false,
         settle,
@@ -650,7 +674,7 @@ export function createRunService(deps: RunServiceDeps = {}): RunService {
         return { kind: 'started', run: copySummary(record) };
       }
       transition(record, 'running');
-      registerJob(record);
+      if (options.notifyAgent !== false) registerJob(record);
       void pump(record, proc);
       void proc.done.then(() => {
         settleFromProcess(record, proc);

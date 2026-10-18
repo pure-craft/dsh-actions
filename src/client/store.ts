@@ -74,7 +74,7 @@ export interface PanelState {
    * form. `values` are the current field values; `error` is the inline
    * message after a 400 invalid-params rejection.
    */
-  pendingParams: { actionId: string; values: Record<string, string>; error: string | null } | null;
+  pendingParams: { actionId: string; values: Record<string, string>; notifyAgent: boolean; error: string | null } | null;
   /** T41: an active run's tab close waits on the terminate-and-close confirmation. */
   closeRunConfirm: { runId: string; actionLabel: string } | null;
   /** T51: an action delete waits on the strong (acknowledge-gated) confirmation. */
@@ -446,19 +446,16 @@ export class PanelStore {
 
   /**
    * Entry point for every run button: an action with declared `inputs` opens
-   * the parameter form first; anything else starts immediately. `prefill`
+   * the unified run form; notification consent is per execution. `prefill`
    * (typically a run's own params on rerun) seeds the form values ahead of
    * the declared defaults.
    */
   requestRun(actionId: string, prefill?: Record<string, string>): void {
     const action = this.stateValue.catalog?.actions.find((candidate) => candidate.id === actionId);
     const inputs = action?.inputs;
-    if (action === undefined || inputs === undefined || inputs.length === 0) {
-      void this.runAction(actionId);
-      return;
-    }
-    const values = resolveParamValues(inputs, prefill);
-    this.update({ pendingParams: { actionId, values, error: null } });
+    if (action === undefined) return;
+    const values = resolveParamValues(inputs ?? [], prefill);
+    this.update({ pendingParams: { actionId, values, notifyAgent: false, error: null } });
   }
 
   /** T41: the action's presentation.panel mode ('new' when unset or unknown). */
@@ -542,7 +539,7 @@ export class PanelStore {
   async submitParamForm(): Promise<void> {
     const form = this.stateValue.pendingParams;
     if (form === null) return;
-    await this.runAction(form.actionId, { params: form.values });
+    await this.runAction(form.actionId, { params: form.values, notifyAgent: form.notifyAgent });
   }
 
   updateParamValue(inputId: string, value: string): void {
@@ -551,11 +548,16 @@ export class PanelStore {
     this.update({ pendingParams: { ...form, values: { ...form.values, [inputId]: value }, error: null } });
   }
 
+  updateNotifyAgent(notifyAgent: boolean): void {
+    const form = this.stateValue.pendingParams;
+    if (form !== null) this.update({ pendingParams: { ...form, notifyAgent } });
+  }
+
   dismissParamForm(): void {
     this.update({ pendingParams: null });
   }
 
-  async runAction(actionId: string, options: { confirmed?: boolean; params?: Record<string, string> } = {}): Promise<void> {
+  async runAction(actionId: string, options: { confirmed?: boolean; params?: Record<string, string>; notifyAgent?: boolean } = {}): Promise<void> {
     if (this.stateValue.sessionId === '') return;
     const signal = this.signal;
     this.update({ actionError: false, declined: null });
@@ -622,7 +624,7 @@ export class PanelStore {
     // A confirmation arising from a parameter form resends the same values.
     const form = this.stateValue.pendingParams;
     const options = form !== null && form.actionId === actionId
-      ? { confirmed: true, params: form.values }
+      ? { confirmed: true, params: form.values, notifyAgent: form.notifyAgent }
       : { confirmed: true };
     await this.runAction(actionId, options);
   }
@@ -727,7 +729,7 @@ export class PanelStore {
         const actionId = conflict.actionId;
         this.update({ conflict: null });
         // Armed rerun replays the finished run's params without re-asking.
-        void this.runAction(actionId, conflict.run.params === undefined ? {} : { params: conflict.run.params });
+        this.requestRun(actionId, conflict.run.params);
       }
       return;
     }

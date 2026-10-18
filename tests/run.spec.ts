@@ -94,28 +94,50 @@ class FakeShell {
   }
 }
 
+// Independent strict mirror of the inspected 0.2.1-rc.2 boundary: do not
+// derive this from JobsLike, which previously allowed the same bug in both.
+interface CurrentJobSpec {
+  kind: 'bash';
+  label: string;
+  owner?: string;
+  outputLimitBytes?: number;
+  output?: readonly { read(fromByte: number): { text: string; nextOffset: number; lossy: boolean; spillPath?: string } }[];
+  run(): {
+    cancel(reason?: string): void;
+    done: Promise<{ status: 'completed' | 'killed' | 'failed'; detail?: string; result?: string }>;
+  };
+}
+
 interface FakeJobEntry {
   label: string;
+  spec: CurrentJobSpec;
   hooks: JobHooksLike;
   killed: boolean;
 }
 
 class FakeJobs implements JobsLike {
   entries = new Map<string, FakeJobEntry>();
+  killCalls: { id: string; caller: string | undefined; reason: string | undefined }[] = [];
   private sequence = 0;
-
-  start(spec: { kind: 'bash'; label: string; run(): JobHooksLike }): string {
+  start(spec: CurrentJobSpec): string {
+    if (spec.owner !== undefined && typeof spec.owner !== 'string') throw new Error('owner must be a SessionId');
+    const hooks = spec.run();
+    if ('readOutput' in hooks) throw new Error('readOutput is not a JobHooks member');
+    expect(Object.keys(hooks).sort()).toEqual(['cancel', 'done']);
     this.sequence += 1;
     const id = `bash-${this.sequence}`;
-    this.entries.set(id, { label: spec.label, hooks: spec.run(), killed: false });
+    this.entries.set(id, { label: spec.label, spec, hooks, killed: false });
     return id;
   }
 
-  kill(id: string): 'requested' | 'already-finished' {
+  kill(id: string, caller?: string, reason?: string): 'requested' | 'already-finished' {
+    this.killCalls.push({ id, caller, reason });
     const entry = this.entries.get(id);
-    if (entry === undefined || entry.killed) return 'already-finished';
+    if (entry === undefined) throw new Error('unknown job');
+    if (entry.spec.owner !== caller) throw new Error('foreign job');
+    if (entry.killed) return 'already-finished';
     entry.killed = true;
-    entry.hooks.cancel('test kill');
+    entry.hooks.cancel(reason);
     return 'requested';
   }
 }
@@ -131,6 +153,33 @@ function makeService(overrides: Partial<RunServiceDeps> = {}) {
   });
   return { service, shell, jobs };
 }
+
+describe('manual executor routing', () => {
+  it('runs quietly without Jobs while retaining output and cancellation', async () => {
+    const { service, shell, jobs } = makeService();
+    const result = await service.run(makeAction(), { workspace: WORKSPACE, sessionId: SESSION, notifyAgent: false });
+    const id = startedRunId(result);
+    expect(jobs.entries.size).toBe(0);
+    expect(service.cancel(id).status).toBe('cancelled');
+    expect(shell.processes[0]!.killed).toBe(true);
+    expect(jobs.killCalls).toEqual([]);
+    service.dispose();
+  });
+
+  it.each([true, undefined])('registers Jobs for notification preference %s', async (notifyAgent) => {
+    const { service, jobs } = makeService();
+    await service.run(makeAction(), { workspace: WORKSPACE, sessionId: SESSION, ...(notifyAgent === undefined ? {} : { notifyAgent }) });
+    expect(jobs.entries.size).toBe(1);
+    service.dispose();
+  });
+
+  it('supports quiet execution with no Jobs service and kills it on disposal', async () => {
+    const { service, shell } = makeService({ jobs: undefined });
+    await service.run(makeAction(), { workspace: WORKSPACE, sessionId: SESSION, notifyAgent: false });
+    service.dispose();
+    expect(shell.processes[0]!.killed).toBe(true);
+  });
+});
 
 function startedRunId(result: Awaited<ReturnType<ReturnType<typeof createRunService>['run']>>): string {
   if (result.kind !== 'started') throw new Error(`expected started, got ${result.kind}`);
@@ -291,7 +340,81 @@ describe('RunService lifecycle', () => {
     shell.processes[0]?.finish(0, 'done');
     await service.waitForSettled(runId);
     const outcome = await entry?.hooks.done;
-    expect(outcome).toMatchObject({ status: 'completed', output: 'done' });
+    expect(outcome).toEqual({ status: 'completed', result: 'done' });
+  });
+
+  it.each([undefined, { id: 'not-the-session' }])('fences Jobs by session id, not caller Agent metadata (%j)', async (owner) => {
+    const { service, shell, jobs } = makeService();
+    const id = startedRunId(await service.run(makeAction(), { workspace: WORKSPACE, sessionId: SESSION, owner }));
+    const [jobId, entry] = [...jobs.entries][0]!;
+    expect(entry.spec.owner).toBe(SESSION);
+    expect(() => jobs.kill(jobId, 'session-foreign')).toThrow('foreign job');
+    service.cancel(id, 'explicit reason');
+    expect(jobs.killCalls.at(-1)).toEqual({ id: jobId, caller: SESSION, reason: 'explicit reason' });
+    expect(entry.killed).toBe(true);
+    expect(shell.processes[0]!.killed).toBe(true);
+    expect(await entry.hooks.done).toEqual({ status: 'killed', result: '' });
+  });
+
+  it('reports failed Jobs outcomes through result, not output', async () => {
+    const { service, shell, jobs } = makeService();
+    const id = startedRunId(await service.run(makeAction(), { workspace: WORKSPACE, sessionId: SESSION }));
+    shell.processes[0]!.finish(7, 'failed log');
+    await service.waitForSettled(id);
+    expect(await [...jobs.entries.values()][0]!.hooks.done).toEqual({
+      status: 'failed', detail: 'Action exited with code 7', result: 'failed log',
+    });
+  });
+
+  it('provides independently resumable Jobs sources backed by the bounded plugin buffer', async () => {
+    // Manual pump seam makes retention/offset checks deterministic. No new
+    // shell.observed requirement is introduced into the existing shell adapter.
+    let poll!: () => void;
+    const { service, shell, jobs } = makeService({
+      outputLimitBytes: 8,
+      sleep: () => new Promise<void>((resolve) => { poll = resolve; }),
+    });
+    const id = startedRunId(await service.run(makeAction(), { workspace: WORKSPACE, sessionId: SESSION }));
+    const entry = [...jobs.entries.values()][0]!;
+    expect(entry.spec.outputLimitBytes).toBe(8);
+    expect(entry.spec.output).toHaveLength(1);
+    const source = entry.spec.output![0]!;
+    expect(source.read(0)).toEqual({ text: '', nextOffset: 0, lossy: false });
+    shell.processes[0]!.emit('你ab'); // five UTF-8 bytes, not three characters
+    poll();
+    await Promise.resolve();
+    expect(source.read(0)).toEqual({ text: '你ab', nextOffset: 5, lossy: false });
+    expect(source.read(3)).toEqual({ text: 'ab', nextOffset: 5, lossy: false });
+    expect(source.read(5)).toEqual({ text: '', nextOffset: 5, lossy: false });
+    // Jobs reads must neither repeat-consume shell output nor move UI cursors.
+    expect(source.read(0).text).toBe('你ab');
+    expect(service.readOutput(id, 0).text).toBe('你ab');
+    shell.processes[0]!.finish(0, 'cdefgh');
+    await service.waitForSettled(id);
+    expect(source.read(0)).toEqual({ text: 'abcdefgh', nextOffset: 11, lossy: true });
+    expect(source.read(5)).toEqual({ text: 'cdefgh', nextOffset: 11, lossy: false });
+    expect(source.read(11)).toEqual({ text: '', nextOffset: 11, lossy: false });
+    expect(Buffer.byteLength(source.read(0).text)).toBeLessThanOrEqual(8);
+    expect(await entry.hooks.done).toEqual({ status: 'completed', result: 'abcdefgh' });
+    poll(); // release the pump's now-terminal wait
+  });
+
+  it('keeps lossy shell provenance and spill paths in Jobs output sources', async () => {
+    const { service, shell, jobs } = makeService();
+    const id = startedRunId(await service.run(makeAction(), { workspace: WORKSPACE, sessionId: SESSION }));
+    shell.processes[0]!.pendingRead = { delta: 'tail', lossy: true, stderrSpillPath: '/tmp/stderr.log' };
+    shell.processes[0]!.finish(1);
+    await service.waitForSettled(id);
+    const source = [...jobs.entries.values()][0]!.spec.output![0]!;
+    expect(source.read(0)).toEqual({ text: 'tail', nextOffset: 4, lossy: true, spillPath: '/tmp/stderr.log' });
+    expect(source.read(4).lossy).toBe(true);
+  });
+
+  it('keeps execution and cancellation working when Jobs registration is refused', async () => {
+    const { service, shell } = makeService({ jobs: { start: () => { throw new Error('no controller'); }, kill: () => { throw new Error('unexpected kill'); } } });
+    const id = startedRunId(await service.run(makeAction(), { workspace: WORKSPACE, sessionId: SESSION }));
+    expect(service.cancel(id).status).toBe('cancelled');
+    expect(shell.processes[0]!.killed).toBe(true);
   });
 
   it('runs without a jobs registry (optional degradation)', async () => {
@@ -419,7 +542,7 @@ describe('RunService cancel', () => {
     expect(jobId).toBeDefined();
     if (jobId === undefined) return;
 
-    expect(jobs.kill(jobId)).toBe('requested');
+    expect(jobs.kill(jobId, SESSION)).toBe('requested');
     expect(service.inspect(runId).run.status).toBe('cancelled');
     expect(shell.processes[0]?.killed).toBe(true);
   });

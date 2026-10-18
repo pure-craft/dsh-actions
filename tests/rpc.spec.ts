@@ -57,6 +57,32 @@ function fakeShellProcess(outputs: string[]): FakeProcess {
   };
 }
 
+describe('manual notification routing', () => {
+  it.each([undefined, false, true])('routes manual notification preference %s', async (notifyAgent) => {
+    let registrations = 0;
+    const proc = fakeShellProcess(['hello']);
+    const runs = createRunService({
+      shell: { resolve: (request) => request, execute: async () => proc },
+      jobs: { start: () => { registrations += 1; return 'bash-test'; }, kill: () => 'requested' },
+      pollIntervalMs: 1,
+    });
+    const deps = createDeps({ runs });
+    const response = await route(deps, ACTIONS_API_PATHS.runs).fetch(post({ sessionId: 'session-1', actionId: ACTION.id, ...(notifyAgent === undefined ? {} : { notifyAgent }) }));
+    expect(response.status).toBe(200);
+    expect(registrations).toBe(notifyAgent === true ? 1 : 0);
+    runs.dispose();
+    proc.finish(0);
+  });
+
+  it.each(['false', null, 0, {}])('rejects non-boolean notifyAgent %j', async (notifyAgent) => {
+    const deps = createDeps();
+    const response = await route(deps, ACTIONS_API_PATHS.runs).fetch(post({ sessionId: 'session-1', actionId: ACTION.id, notifyAgent }));
+    expect(response.status).toBe(400);
+    expect(deps.runs.listRuns({ sessionId: 'session-1' })).toHaveLength(0);
+    deps.runs.dispose();
+  });
+});
+
 function createDeps(overrides: Partial<ActionsApiDeps> = {}): ActionsApiDeps & { proc: FakeProcess } {
   const proc = fakeShellProcess(['hello']);
   const runs: RunService =
@@ -488,6 +514,38 @@ describe('inspect and cancel endpoints', () => {
 });
 
 describe('stream endpoint', () => {
+  it('closes an active stream before a settled run is evicted or forgotten', async () => {
+    const proc = fakeShellProcess(['hello']);
+    const runs = createRunService({
+      shell: { resolve: (request) => request, execute: async () => proc },
+      terminalRetentionPerSession: 0,
+      pollIntervalMs: 1,
+    });
+    const deps = createDeps({ runs });
+    const runId = await startRun(deps, 'session-1');
+    const response = await route(deps, ACTIONS_API_PATHS.stream).fetch(post({ sessionId: 'session-1', runId }));
+    const framesPromise = readNdjson(response);
+    proc.finish(0);
+    const frames = await framesPromise;
+    expect(frames.at(-1)).toMatchObject({ type: 'status', run: { id: runId, status: 'succeeded' } });
+    expect(() => runs.inspect(runId)).toThrow('Unknown action run');
+    // A reconnect after eviction is an ordinary 404, not an uncaught timer.
+    const reconnect = await route(deps, ACTIONS_API_PATHS.stream).fetch(post({ sessionId: 'session-1', runId }));
+    expect(reconnect.status).toBe(404);
+    runs.dispose();
+  });
+
+  it('closes streams on service disposal without polling removed records', async () => {
+    const deps = createDeps();
+    const runId = await startRun(deps, 'session-1');
+    const response = await route(deps, ACTIONS_API_PATHS.stream).fetch(post({ sessionId: 'session-1', runId }));
+    const framesPromise = readNdjson(response);
+    deps.runs.dispose();
+    const frames = await framesPromise;
+    expect(frames.at(-1)).toMatchObject({ type: 'status', run: { status: 'cancelled' } });
+    deps.runs.forget(runId);
+    deps.proc.finish(0);
+  });
   it('replays buffered output and closes on terminal status', async () => {
     const deps = createDeps();
     const runId = await startRun(deps, 'session-1');

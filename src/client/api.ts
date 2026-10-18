@@ -63,7 +63,7 @@ export interface ActionsApi {
   runAction(
     sessionId: string,
     actionId: string,
-    options?: { confirmed?: boolean; params?: Record<string, string> },
+    options?: { confirmed?: boolean; params?: Record<string, string>; notifyAgent?: boolean },
     signal?: AbortSignal,
   ): Promise<RunStartResult>;
   inspectRun(sessionId: string, runId: string, offset?: number, signal?: AbortSignal): Promise<RunInspection>;
@@ -162,6 +162,7 @@ export function createHttpApi(base: string = ACTIONS_API_BASE): ActionsApi {
       const body: Record<string, unknown> = { sessionId, actionId };
       if (options?.confirmed === true) body.confirmed = true;
       if (options?.params !== undefined) body.params = options.params;
+      body.notifyAgent = options?.notifyAgent ?? false;
       return parseRunStartResult(await postJson(`${base}/runs`, body, signal));
     },
     async inspectRun(sessionId, runId, offset, signal) {

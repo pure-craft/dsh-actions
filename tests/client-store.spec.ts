@@ -404,6 +404,7 @@ class FakeApi implements ActionsApi {
   readonly invalidParamsFor = new Set<string>();
   /** Params recorded per run call (same index as the matching `run:*` calls). */
   readonly paramsCalls: (Record<string, string> | undefined)[] = [];
+  readonly notifyCalls: (boolean | undefined)[] = [];
   /** Runs whose stream answers 404 run-not-found (Host LRU eviction). */
   readonly stream404For = new Set<string>();
   /** Runs whose inspect answers 404 run-not-found. */
@@ -416,10 +417,11 @@ class FakeApi implements ActionsApi {
   runAction(
     sessionId: string,
     actionId: string,
-    options?: { confirmed?: boolean; params?: Record<string, string> },
+    options?: { confirmed?: boolean; params?: Record<string, string>; notifyAgent?: boolean },
   ): Promise<RunStartResult> {
     this.calls.push(`run:${sessionId}:${actionId}${options?.confirmed === true ? ':confirmed' : ''}`);
     this.paramsCalls.push(options?.params);
+    this.notifyCalls.push(options?.notifyAgent);
     if (this.declineNext !== undefined) {
       const decline = this.declineNext;
       this.declineNext = undefined;
@@ -1008,13 +1010,15 @@ describe('PanelStore parameter form (T34)', () => {
     runs: [],
   });
 
-  it('actions without inputs run directly, no form', { timeout: 15000 }, async () => {
+  it('actions without inputs show notification-only run form', { timeout: 15000 }, async () => {
     const api = new FakeApi({ s1: '/ws/a' });
     const store = new PanelStore(api);
     await bind(store, 's1');
 
     store.requestRun('build');
-    await sleep(30);
+    expect(store.state.pendingParams).toEqual({ actionId: 'build', values: {}, notifyAgent: false, error: null });
+    expect(api.calls).not.toContain('run:s1:build');
+    await store.submitParamForm();
     expect(store.state.pendingParams).toBeNull();
     expect(api.calls).toContain('run:s1:build');
     const runId = store.state.latestRunByAction.build as string;
@@ -1033,6 +1037,7 @@ describe('PanelStore parameter form (T34)', () => {
     expect(store.state.pendingParams).toEqual({
       actionId: 'build',
       values: { target: 'all', mode: 'dev' },
+      notifyAgent: false,
       error: null,
     });
     expect(api.calls).not.toContain('run:s1:build');
@@ -1048,10 +1053,12 @@ describe('PanelStore parameter form (T34)', () => {
 
     store.requestRun('build');
     store.updateParamValue('target', 'web');
+    store.updateNotifyAgent(true);
     await store.submitParamForm();
     await sleep(30);
 
     expect(api.paramsCalls[api.paramsCalls.length - 1]).toEqual({ target: 'web', mode: 'dev' });
+    expect(api.notifyCalls.at(-1)).toBe(true);
     expect(store.state.pendingParams).toBeNull();
 
     // There is no client-side parameter memory — defaults return.
@@ -1114,6 +1121,7 @@ describe('PanelStore parameter form (T34)', () => {
 
     store.requestRun('build');
     store.updateParamValue('target', 'web');
+    store.updateNotifyAgent(true);
     await store.submitParamForm();
     await sleep(30);
 
@@ -1126,6 +1134,7 @@ describe('PanelStore parameter form (T34)', () => {
 
     expect(api.calls).toContain('run:s1:build:confirmed');
     expect(api.paramsCalls[api.paramsCalls.length - 1]).toEqual({ target: 'web', mode: 'dev' });
+    expect(api.notifyCalls.at(-1)).toBe(true);
     expect(store.state.confirmation).toBeNull();
     expect(store.state.pendingParams).toBeNull();
     const runId = store.state.latestRunByAction.build as string;

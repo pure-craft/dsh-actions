@@ -1,3 +1,4 @@
+import { terminalLabels } from './terminal-labels.js';
 /**
  * Custom conversation renderings for the actions_* tools.
  *
@@ -19,7 +20,7 @@ import {
   StateDot,
   TerminalBlock,
 } from '@deepseek-ai/dsh-client-ui-primitives';
-import type { StateDotState, TerminalBlockLabels } from '@deepseek-ai/dsh-client-ui-primitives';
+import type { StateDotState } from '@deepseek-ai/dsh-client-ui-primitives';
 import { ACTIONS_PLUGIN_ID } from '../contract.js';
 import type { ActionRunStatus } from '../contract.js';
 import type { Translate } from './locale.js';
@@ -97,23 +98,6 @@ function statusKey(status: string): 'statusQueued' | 'statusRunning' | 'statusSu
   }
 }
 
-function terminalLabels(t: Translate): TerminalBlockLabels {
-  return {
-    signal: (signal) => t('termSignal', { signal }),
-    exitCode: (code) => t('termExitCode', { code }),
-    noExitCode: t('termNoExitCode'),
-    running: t('termRunning'),
-    failed: t('termFailed'),
-    done: t('termDone'),
-    copy: t('termCopy'),
-    copied: t('termCopied'),
-    noOutput: t('termNoOutput'),
-    collapseAria: t('termCollapseAria'),
-    collapse: t('termCollapse'),
-    expandAria: (hidden) => t('termExpandAria', { hidden }),
-    expand: (hidden) => t('termExpand', { hidden }),
-  };
-}
 
 /**
  * The one native card shape every view uses: DisclosureRow with an icon and a

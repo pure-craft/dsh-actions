@@ -33,10 +33,16 @@ function isJobsLike(value: unknown): value is JobsLike {
 }
 
 export function resolveRunCapabilities(ctx: HostServiceResolver): RunCapabilities {
-  const shell = ctx.get('shell');
-  const jobs = ctx.get('jobs');
+  // Resolve optional services when a run starts, not once during bundle apply:
+  // they may become available later in the composition's startup sequence.
   return {
-    shell: isShellLike(shell) ? shell : undefined,
-    jobs: isJobsLike(jobs) ? jobs : undefined,
+    get shell() {
+      const shell = ctx.get('shell');
+      return isShellLike(shell) ? shell : undefined;
+    },
+    get jobs() {
+      const jobs = ctx.get('jobs');
+      return isJobsLike(jobs) ? jobs : undefined;
+    },
   };
 }

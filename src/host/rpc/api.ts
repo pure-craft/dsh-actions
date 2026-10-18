@@ -518,6 +518,9 @@ export function createActionsApiRoutes(deps: ActionsApiDeps): ConnectionFetchRou
         if (scope instanceof Response) return scope;
         const actionId = requireString(body, 'actionId');
         if (actionId instanceof Response) return actionId;
+        if (body.notifyAgent !== undefined && typeof body.notifyAgent !== 'boolean') {
+          return failure(400, 'bad-request', 'Field notifyAgent must be a boolean');
+        }
         try {
           const catalog = await deps.loadCatalog(scope.workspace, scope.sessionId);
           const action = catalog.actions.find(
@@ -552,6 +555,7 @@ export function createActionsApiRoutes(deps: ActionsApiDeps): ConnectionFetchRou
             workspace: scope.workspace,
             sessionId: scope.sessionId,
             params,
+            notifyAgent: body.notifyAgent === true,
             sandboxPolicy,
           });
           return json(result);

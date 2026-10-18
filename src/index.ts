@@ -55,7 +55,8 @@ export interface DshActionsService {
 export const inject = ['tools', 'connection', 'agents', 'skills', 'approval', 'systemPrompt'];
 
 interface ConnectionFetchLike {
-  register(route: ConnectionFetchRouteLike): Promise<() => void>;
+  // Current Hosts register synchronously; older supported Hosts returned a Promise.
+  register(route: ConnectionFetchRouteLike): (() => void | Promise<void>) | Promise<() => void | Promise<void>>;
 }
 
 interface ConnectionLike {
@@ -138,8 +139,10 @@ export function apply(ctx: HostContext, internals: ApplyInternals = {}): void {
   // while selecting a different execution policy at their trusted Host entry.
   // Agent runs inherit the session sandbox unless explicitly approved for one-time elevation; manual Web runs are fixed
   // below to local-user execution and cannot choose that mode in request data.
-  const sandboxPolicy = ctx.get('sandboxPolicy');
-  const sandboxPolicyResolver = isSandboxPolicyResolverLike(sandboxPolicy) ? sandboxPolicy : undefined;
+  const sandboxPolicyResolver = (): SandboxPolicyResolverLike | undefined => {
+    const service = ctx.get('sandboxPolicy');
+    return isSandboxPolicyResolverLike(service) ? service : undefined;
+  };
   // T29: approval-gated actions (approval: agent|always) ask through the
   // session approval channel; without it they fail closed (unavailable).
   const approval = ctx.get('approval');
@@ -178,7 +181,7 @@ export function apply(ctx: HostContext, internals: ApplyInternals = {}): void {
         registerActionTools(tools, {
           catalog,
           runs,
-          sandboxPolicy: sandboxPolicyResolver,
+          get sandboxPolicy() { return sandboxPolicyResolver(); },
           approval: approvalService,
           actionLayers,
           notifyCatalogChanged,
@@ -259,22 +262,31 @@ export function apply(ctx: HostContext, internals: ApplyInternals = {}): void {
   });
   for (const route of routes) {
     ctx.effect(() => {
-      let dispose: () => void = () => undefined;
+      let dispose: (() => void | Promise<void>) | undefined;
       let active = true;
-      void connection.fetch.register(route).then(
-        (registered) => {
-          if (active) dispose = registered;
-          else registered();
-        },
-        // T37: a rejected registration must not become an unhandledRejection
-        // (that can take the Host down); log and stay unregistered.
-        (error: unknown) => {
-          console.error(`[dsh-actions] failed to register api route ${route.path}:`, error);
-        },
-      );
+      const report = (error: unknown): void => {
+        console.error(`[dsh-actions] api route ${route.path}:`, error);
+      };
+      const release = (registered: () => void | Promise<void>): void => {
+        try {
+          void Promise.resolve(registered()).catch(report);
+        } catch (error) {
+          report(error);
+        }
+      };
+      const retain = (registered: () => void | Promise<void>): void => {
+        if (active) dispose = registered;
+        else release(registered);
+      };
+      // Preserve synchronous registration/cleanup on current Hosts, while
+      // accepting older async registrations and containing disposal rejection.
+      const registered = connection.fetch.register(route);
+      if (typeof registered === 'function') retain(registered);
+      else void registered.then(retain, report);
       return () => {
         active = false;
-        dispose();
+        if (dispose !== undefined) release(dispose);
+        dispose = undefined;
       };
     }, `dsh-actions: api route ${route.path}`);
   }

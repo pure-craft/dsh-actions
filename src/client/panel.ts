@@ -1,3 +1,4 @@
+import { terminalLabels } from './terminal-labels.js';
 /**
  * Actions panel components (React.createElement only — the client half is a
  * compiled bundle without JSX).
@@ -5,6 +6,7 @@
 import * as React from 'react';
 import {
   Button,
+  Checkbox,
   IconCheckOutlineRegular,
   IconChevronDownOutlineRegular,
   IconChevronUpOutlineRegular,
@@ -31,7 +33,6 @@ import {
 import type {
   StateDotState,
   TagTone,
-  TerminalBlockLabels,
 } from '@deepseek-ai/dsh-client-ui-primitives';
 import type {
   ActionInputConfig,
@@ -120,23 +121,6 @@ function tagTone(status: ActionRunStatus): TagTone {
   }
 }
 
-function terminalLabels(t: Translate): TerminalBlockLabels {
-  return {
-    signal: (signal) => t('termSignal', { signal }),
-    exitCode: (code) => t('termExitCode', { code }),
-    noExitCode: t('termNoExitCode'),
-    running: t('termRunning'),
-    failed: t('termFailed'),
-    done: t('termDone'),
-    copy: t('termCopy'),
-    copied: t('termCopied'),
-    noOutput: t('termNoOutput'),
-    collapseAria: t('termCollapseAria'),
-    collapse: t('termCollapse'),
-    expandAria: (hidden) => t('termExpandAria', { hidden }),
-    expand: (hidden) => t('termExpand', { hidden }),
-  };
-}
 
 /** Native-anchor wrapper for the host Tooltip (it injects ref + hover handlers). */
 function tooltipWrap(child: React.ReactElement): React.ReactElement {
@@ -624,7 +608,7 @@ function ParamField(props: {
 
 function ParamForm(props: {
   action: ProjectActionSummary;
-  form: { values: Record<string, string>; error: string | null };
+  form: { values: Record<string, string>; notifyAgent: boolean; error: string | null };
   store: PanelStore;
   t: Translate;
 }): React.ReactElement {
@@ -634,6 +618,11 @@ function ParamForm(props: {
   const requiredIndex = inputs.findIndex((input) => input.required === true);
   const focusIndex = requiredIndex >= 0 ? requiredIndex : 0;
   const footer = h('div', { className: 'dsh-actions-params-footer' },
+    h(Checkbox, {
+      checked: form.notifyAgent,
+      label: t('notifyAgent'),
+      onChange: (checked: boolean) => { store.updateNotifyAgent(checked); },
+    }),
     h('div', { className: 'dsh-actions-params-actions' },
       h(Button, { variant: 'ghost', size: 'sm', onClick: () => { store.dismissParamForm(); } }, t('confirmCancel')),
       h(Button, {
@@ -1092,7 +1081,7 @@ export function ActionsPanel(deps: PanelDeps): React.ReactElement {
         : null,
       state.pendingParams !== null
         ? (() => {
-            const form = state.pendingParams as { actionId: string; values: Record<string, string>; error: string | null };
+            const form = state.pendingParams as NonNullable<PanelStore['state']['pendingParams']>;
             const target = actions.find((action) => action.id === form.actionId);
             // The form is a body-portaled Modal — no scroll-into-view needed.
             return target === undefined
