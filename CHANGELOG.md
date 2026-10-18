@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.4.1 — 2026-10-18
+
+### Fixed
+
+- Support current Host synchronous route registration and asynchronous disposal, including late registration and cleanup failures.
+- Align Jobs integration with session-id ownership, `result` outcomes and independent byte-offset output sources.
+- Resolve optional execution services at use time instead of permanently caching missing services during startup.
+- Supply the newer terminal component's command-line labels, fixing a blank Actions panel when displaying a run.
+
+### Changed
+
+- Every manual run now opens the shared run dialog, including Actions without parameters.
+- The footer's “Notify Agent when finished” checkbox defaults to off for each manual run. Unchecked runs remain managed by Actions without Jobs registration; checked runs also register with Host Jobs for completion reporting.
+- Agent-started runs retain their Jobs notification path. No new `actions.json` fields or Agent tool parameters are required.
+- Standalone runs retain output, history, explicit cancellation and plugin-disposal cleanup, but do not appear in Host Jobs or inherit Jobs owner-disposal cleanup.
+
+### Verified
+
+- Typecheck, lint and 440 tests passed; Host and Client production bundles built successfully.
+- Local user acceptance covered the updated run dialog and execution behavior on DSH 0.2.1-rc.2. Historical supported Hosts were not exhaustively retested.
+
 ## 0.4.0 — 2026-10-16
 
 ### Permission behavior change
