@@ -1,6 +1,6 @@
 {
   "name": "dsh-actions",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Run workspace and global actions from the DeepSeek Harness Web UI and agent tools — one definition for both.",
   "license": "MIT",
   "type": "module",
@@ -20,7 +20,8 @@
     "skills",
     "cordis.patch.yml",
     "README.md",
-    "README.en.md"
+    "README.en.md",
+    "THIRD_PARTY_NOTICES.md"
   ],
   "scripts": {
     "build": "tsdown",

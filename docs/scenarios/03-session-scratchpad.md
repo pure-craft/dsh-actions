@@ -21,7 +21,7 @@ Agent：→ actions_configure({ operation: "create", layer: "session", definitio
 注册后它出现在面板的会话分区（`session:<label>`），和文件层任务一样一键运行、一样流式看输出。支持两种粒度：
 
 - **独立命令**：完整的新任务；
-- **变体**：`extends` 继承现有任务 + `params` 钉死参数——比如从 `workspace:deploy` 派生"部署到 staging（本会话专用）"。
+- **变体**：`extends` 继承现有任务 + 派生 `inputs` 的 `default` 选择默认参数——比如从 `workspace:deploy` 派生"部署到 staging（本会话专用）"。
 
 ## 生命周期
 
@@ -30,4 +30,4 @@ Agent：→ actions_configure({ operation: "create", layer: "session", definitio
 
 ## 从临时到长期：review-and-persist
 
-用得好的临时任务别留在会话里烂掉：面板会话分区提供审阅入口，确认值得长期保留时**提升到文件层**（写入工作区或全局 `actions.json`），走正常 git 审查，成为项目共享能力。这正是 DSH Actions 想要的演进路径：Agent 驱动发现 → 会话内试用 → 人审阅 → 固化共享。
+用得好的临时任务别留在会话里烂掉：确认值得长期保留时，请 Agent 经 `actions_configure` 审批创建等价的工作区或全局定义，验证后再删除原会话条目，完成**提升到文件层**（面板尚无直接提升入口），走正常 git 审查，成为项目共享能力。这正是 DSH Actions 想要的演进路径：Agent 驱动发现 → 会话内试用 → 人审阅 → 固化共享。

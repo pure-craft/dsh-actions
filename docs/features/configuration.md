@@ -4,7 +4,7 @@
 
 > 返回 [README](https://github.com/pure-craft/dsh-actions/blob/main/README.md) ｜ 相关：场景文档（[策展散落的脚本入口](https://github.com/pure-craft/dsh-actions/blob/main/docs/scenarios/01-curate-scripts.md) / [CI 流水线](https://github.com/pure-craft/dsh-actions/blob/main/docs/scenarios/02-ci-pipeline.md) / [会话草稿本](https://github.com/pure-craft/dsh-actions/blob/main/docs/scenarios/03-session-scratchpad.md)）｜ [面板](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/panel.md) ｜ [会话层](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/session-layer.md)
 
-Action 定义的唯一来源是独立的 `actions.json`（**JSONC**：允许注释与尾逗号），分三层读取，合并优先级递增：
+Action 定义的唯一来源是独立的 `actions.json`（**JSONC**：允许注释与尾逗号），分三个完全独立的来源读取：
 
 | 层 | 路径 | 适用 |
 | --- | --- | --- |
@@ -20,10 +20,13 @@ Action 定义的唯一来源是独立的 `actions.json`（**JSONC**：允许注�
 
 | 字段 | 必备 | 含义 |
 | --- | --- | --- |
-| `label` | 是 | 展示名；也是跨层合并键与稳定 id（`<layer>:<label>`）的基础 |
+| `label` | 是 | 展示名与稳定 id（`<layer>:<label>`）的基础；同一来源文件内必须唯一 |
 | `command` | 是（`extends` 条目可省略，继承基定义） | Shell 命令，经 `shell -c` 按入口与审批决定的权限执行；可引用 `${input:id}` |
 | `detail` | 否 | 一行描述，面板与 `actions_query` 都展示——Agent 靠它判断任务是否合用，务必写 |
-| `visibility` | 否 | `all`（默认，面板+Agent）/ `ui`（仅面板）/ `agent`（仅 Agent 工具） |
+| `agentVisible` | 否 | 布尔，默认 true；false 禁止 Agent 发现/执行，不影响面板显示 |
+| `favorite` | 否 | UI-only 常用标记，默认 false；不随 `extends` 继承 |
+| `icon` | 否 | UI-only Iconify 图标；与 `favorite` 一起从 Agent 常规投影中排除 |
+| `visibility` | 否 | 已弃用但兼容：`ui` 对应 false，`all`/`agent` 对应 true；显式 `agentVisible` 优先；load 输出 warnings |
 | `approval` | 否 | `never`（默认）/ `agent` / `always`——运行前的审批要求，见下文 |
 | `options.cwd` | 否 | 工作目录，相对工作区根（默认工作区根） |
 | `options.env` | 否 | 额外环境变量 |
@@ -72,13 +75,13 @@ Agent 入口中，`never` 继承会话沙箱；`agent/always` 的审批明确包
 
 `extends: "<layer>:<label>"` 引用本会话可见的另一 Action 作为基定义：继承其 `command`/`options`/`inputs`/`runOptions` 等，本条写了的字段覆盖。解析规则：
 
-- 按**各层原始条目**解析（合并之前）——被高层覆盖的条目仍可被显式引用，`extends: "global:build"` 命中全局文件自己的 `build`；
+- 按**来源限定的原始条目**解析：`extends: "global:build"` 始终指向全局自己的定义，不受其他来源同名条目影响；
 - 链式继承（a extends b extends c）与声明顺序无关；
 - 引用解析不到时条目保留标记，运行时报 `unknown-extends`。
 
-## 合并规则与容错
+## 独立来源与容错
 
-同 `label` 跨层逐字段合并（VS Code assign 语义）：上层写了的覆盖，未写的继承；`options.env` 按键合并，`inputs` 按 `id` 合并，`extends` 以本条的引用为准。单条缺 `label`/`command` 或字段非法 → 该条忽略并记录 source 级错误，其余照常加载；降级原因与错误详情显示在面板 source 横幅上。
+所有来源完全独立；跨层同名 Action 并存，不覆盖也不隐式继承字段。复用必须显式 `extends`；仅显式继承中 `options.env` 按键、`inputs` 按 `id` 合并，但 `favorite` 不继承。同一文件重复 label 的所有条目全部排除并记录 source 错误，其他 label 照常加载；非法条目以字段级错误报告。配置检查与写入遇到重复 label 文件返回 `invalid-file`，不会静默选中某一条。
 
 ## 变量替换与生效时机
 

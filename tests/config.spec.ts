@@ -276,7 +276,7 @@ describe('mergeActionEntry', () => {
     label: 'build',
     command: 'make all',
     detail: 'global build',
-    visibility: 'ui',
+    agentVisible: false,
     options: { cwd: 'packages/web', env: { A: '1', B: '2' } },
     runOptions: { instanceLimit: 2, instancePolicy: 'reject' },
   };
@@ -292,7 +292,7 @@ describe('mergeActionEntry', () => {
       label: 'build',
       command: 'pnpm build',
       detail: 'global build',
-      visibility: 'ui',
+      agentVisible: false,
       options: { cwd: 'packages/web', env: { A: '1', B: '20', C: '3' } },
       runOptions: { instanceLimit: 2, instancePolicy: 'reuse' },
     });
@@ -397,7 +397,7 @@ describe('mergeActionEntry', () => {
 });
 
 describe('mergeActionEntries', () => {
-  it('matches by label, tags merged entries with the workspace layer', () => {
+  it('keeps same-label entries independent and preserves each file order', () => {
     const merged = mergeActionEntries(
       [
         { label: 'build', command: 'make all', detail: 'global' },
@@ -409,16 +409,14 @@ describe('mergeActionEntries', () => {
       ],
     );
     expect(merged).toEqual([
-      {
-        layer: 'workspace',
-        entry: { label: 'build', command: 'pnpm build', detail: 'global' },
-      },
+      { layer: 'global', entry: { label: 'build', command: 'make all', detail: 'global' } },
       { layer: 'global', entry: { label: 'lint', command: 'make lint' } },
+      { layer: 'workspace', entry: { label: 'build', command: 'pnpm build' } },
       { layer: 'workspace', entry: { label: 'test', command: 'pnpm test' } },
     ]);
   });
 
-  it('keeps the last definition when a layer repeats a label', () => {
+  it('excludes all definitions when a layer repeats a label', () => {
     const merged = mergeActionEntries(
       [
         { label: 'build', command: 'old' },
@@ -426,7 +424,7 @@ describe('mergeActionEntries', () => {
       ],
       [],
     );
-    expect(merged).toEqual([{ layer: 'global', entry: { label: 'build', command: 'new' } }]);
+    expect(merged).toEqual([]);
   });
 });
 
@@ -835,5 +833,54 @@ describe('deleteActionEntryFromFile (T50)', () => {
   it('refuses to clobber a syntactically broken file', async () => {
     const { io } = makeIo('{ not json');
     await expect(deleteActionEntryFromFile('/ws/.dsh/actions.json', 'build', io)).rejects.toThrow('unparseable');
+  });
+});
+
+
+describe('independent configuration migration', () => {
+  it('excludes every duplicate including an invalid duplicate, with original indices', () => {
+    const result = parseActionsFileText(JSON.stringify({ version: '1.0.0', actions: [
+      { label: 'dup', command: 'one' }, { label: 'safe', command: 'ok' }, { label: 'dup' },
+      { label: 'other', command: 'two' }, { label: 'other', command: 'three' },
+    ] }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.entries.map((entry) => entry.label)).toEqual(['safe']);
+    expect(result.errors).toHaveLength(4);
+    for (const index of [0, 2, 3, 4]) expect(result.errors.some((error) => error.startsWith(`actions[${index}].label:`))).toBe(true);
+  });
+
+  it('migrates legacy visibility with friendly warnings and new-field precedence', async () => {
+    const result = await loadConfigLayer('workspace', '/ws/actions.json', async () => JSON.stringify({
+      version: '1.0.0', actions: [
+        { label: 'a', command: 'x', visibility: 'all' },
+        { label: 'b', command: 'x', visibility: 'ui' },
+        { label: 'c', command: 'x', visibility: 'agent' },
+        { label: 'd', command: 'x', visibility: 'ui', agentVisible: true },
+        { label: 'e', command: 'x', visibility: 'all', agentVisible: false },
+      ],
+    }));
+    expect(result.entries.map((entry) => entry.agentVisible)).toEqual([true, false, true, true, false]);
+    expect(result.entries.every((entry) => !('visibility' in entry))).toBe(true);
+    expect(result.status.errors).toEqual([]);
+    expect(result.status.warnings).toHaveLength(5);
+    expect(result.status.warnings?.[3]).toContain('takes precedence');
+  });
+
+  it('hashes exact source text, including invalid source files', async () => {
+    const read = (text: string) => loadConfigLayer('global', '/g/actions.json', async () => text);
+    const first = await read('{"version":"1.0.0"}');
+    expect(first.status.revision).toMatch(/^[a-f0-9]{64}$/);
+    expect((await read('{"version":"1.0.0"}')).status.revision).toBe(first.status.revision);
+    expect((await read('{"version":"1.0.0"} ')).status.revision).not.toBe(first.status.revision);
+    expect((await read('{ invalid')).status.revision).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it('inherits agentVisible but never inherits favorite through explicit extends', () => {
+    const base: ActionEntryConfig = { label: 'base', command: 'x', agentVisible: false, favorite: true };
+    expect(mergeActionEntry(base, { label: 'child', extends: 'global:base' })).toMatchObject({ agentVisible: false });
+    expect(mergeActionEntry(base, { label: 'child' }).favorite).toBeUndefined();
+    expect(mergeActionEntry(base, { label: 'child', favorite: false }).favorite).toBe(false);
+    expect(mergeActionEntry(base, { label: 'child', favorite: true, agentVisible: true })).toMatchObject({ favorite: true, agentVisible: true });
   });
 });

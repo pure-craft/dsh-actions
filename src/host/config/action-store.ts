@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { parse as parseJsonc, printParseErrorCode } from 'jsonc-parser';
 import type { ParseError } from 'jsonc-parser';
 import { ACTIONS_FILE_VERSION } from '../../contract.js';
@@ -18,7 +18,8 @@ export interface ActionLayerSnapshot {
 
 export type ActionChange =
   | { operation: 'set-field'; field: 'command' | 'detail' | 'icon' | 'visibility' | 'approval' | 'extends'; value: string }
-  | { operation: 'unset-field'; field: 'command' | 'detail' | 'icon' | 'visibility' | 'approval' | 'extends' }
+  | { operation: 'set-field'; field: 'agentVisible'; value: boolean }
+  | { operation: 'unset-field'; field: 'command' | 'detail' | 'icon' | 'visibility' | 'approval' | 'extends' | 'agentVisible' }
   | { operation: 'set-options'; value: ActionEntryConfig['options'] }
   | { operation: 'unset-options' }
   | { operation: 'set-run-options'; value: ActionEntryConfig['runOptions'] }
@@ -64,6 +65,12 @@ async function readRaw(path: string): Promise<{ text: string; config: Record<str
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) throw new ActionStoreError('invalid-file', `Cannot modify non-object actions file ${path}`);
   const config = parsed as Record<string, unknown>;
   if (config.version !== ACTIONS_FILE_VERSION) throw new ActionStoreError('invalid-file', `Unsupported actions file version in ${path}: ${String(config.version)}`);
+  const seen = new Set<string>();
+  for (const entry of entriesOf(config)) {
+    if (typeof entry?.label !== 'string') continue;
+    if (seen.has(entry.label)) throw new ActionStoreError('invalid-file', `Duplicate action label "${entry.label}" in ${path}; fix the file before modifying it.`);
+    seen.add(entry.label);
+  }
   return { text, config };
 }
 
@@ -88,16 +95,19 @@ async function atomicWrite(path: string, config: Record<string, unknown>): Promi
   await rename(tmp, path);
 }
 
-async function serialized<T>(path: string, operation: () => Promise<T>): Promise<T> {
+/** Share this lock with every read-modify-write path for an actions file. */
+export async function withActionFileLock<T>(path: string, operation: () => Promise<T>): Promise<T> {
+  path = resolve(path);
   const previous = locks.get(path) ?? Promise.resolve();
   let release!: () => void;
   const current = new Promise<void>((resolve) => { release = resolve; });
-  locks.set(path, previous.then(() => current));
+  const tail = previous.then(() => current);
+  locks.set(path, tail);
   await previous;
   try { return await operation(); }
   finally {
     release();
-    if (locks.get(path) === current) locks.delete(path);
+    if (locks.get(path) === tail) locks.delete(path);
   }
 }
 
@@ -107,7 +117,7 @@ function validate(entry: ActionEntryConfig): void {
 }
 
 export async function createActionEntry(path: string, entry: ActionEntryConfig): Promise<void> {
-  await serialized(path, async () => {
+  await withActionFileLock(path, async () => {
     const loaded = await readRaw(path);
     const actions = [...entriesOf(loaded.config)];
     if (actions.some((candidate) => candidate.label === entry.label)) throw new ActionStoreError('already-exists', `Action "${entry.label}" already exists in the target layer.`);
@@ -121,8 +131,14 @@ export async function createActionEntry(path: string, entry: ActionEntryConfig):
 export function applyActionChanges(entry: ActionEntryConfig, changes: readonly ActionChange[]): ActionEntryConfig {
   const next: ActionEntryConfig = structuredClone(entry);
   for (const change of changes) {
-    if (change.operation === 'set-field') Object.assign(next, { [change.field]: change.value });
-    else if (change.operation === 'unset-field') delete (next as unknown as Record<string, unknown>)[change.field];
+    if (change.operation === 'set-field' || change.operation === 'unset-field') {
+      const fields = ['command', 'detail', 'icon', 'visibility', 'approval', 'extends', 'agentVisible'];
+      if (!fields.includes(change.field)) throw new ActionStoreError('invalid-entry', `Unsupported field "${change.field}".`);
+      if (change.operation === 'set-field') {
+        if (typeof change.value !== (change.field === 'agentVisible' ? 'boolean' : 'string')) throw new ActionStoreError('invalid-entry', `Invalid value for "${change.field}".`);
+        Object.assign(next, { [change.field]: change.value });
+      } else delete (next as unknown as Record<string, unknown>)[change.field];
+    }
     else if (change.operation === 'set-options') { if (change.value === undefined) delete next.options; else next.options = change.value; }
     else if (change.operation === 'unset-options') delete next.options;
     else if (change.operation === 'set-run-options') { if (change.value === undefined) delete next.runOptions; else next.runOptions = change.value; }
@@ -153,7 +169,7 @@ export function applyActionChanges(entry: ActionEntryConfig, changes: readonly A
 }
 
 export async function updateActionEntry(path: string, label: string, expectedRevision: string, changes: readonly ActionChange[]): Promise<{ before: ActionEntryConfig; after: ActionEntryConfig }> {
-  return serialized(path, async () => {
+  return withActionFileLock(path, async () => {
     const loaded = await readRaw(path);
     const actions = [...entriesOf(loaded.config)];
     const index = actions.findIndex((candidate) => candidate.label === label);
@@ -170,7 +186,7 @@ export async function updateActionEntry(path: string, label: string, expectedRev
 }
 
 export async function deleteActionEntry(path: string, label: string, expectedRevision: string): Promise<ActionEntryConfig> {
-  return serialized(path, async () => {
+  return withActionFileLock(path, async () => {
     const loaded = await readRaw(path);
     const actions = [...entriesOf(loaded.config)];
     const index = actions.findIndex((candidate) => candidate.label === label);

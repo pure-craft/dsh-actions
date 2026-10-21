@@ -118,8 +118,8 @@ function mergeInputs(
 }
 
 /**
- * Field-wise merge (VS Code assign semantics): fields the workspace override
- * writes replace the global base; unwritten fields are inherited.
+ * Explicit extends only: fields the derived definition writes replace its
+ * referenced base; unwritten fields are inherited (except favorite).
  */
 export function mergeActionEntry(
   base: ActionEntryConfig,
@@ -132,9 +132,12 @@ export function mergeActionEntry(
   if (command !== undefined) merged.command = command;
   const detail = override.detail ?? base.detail;
   if (detail !== undefined) merged.detail = detail;
-  const visibility = override.visibility ?? base.visibility;
-  if (visibility !== undefined) merged.visibility = visibility;
-  // T29: field-wise like visibility — workspace approval wins, unwritten inherits.
+  const agentVisible = override.agentVisible ?? (override.visibility === undefined ? undefined : override.visibility !== 'ui')
+    ?? base.agentVisible ?? (base.visibility === undefined ? undefined : base.visibility !== 'ui');
+  if (agentVisible !== undefined) merged.agentVisible = agentVisible;
+  // Favorites belong to this definition, never to its base.
+  if (override.favorite !== undefined) merged.favorite = override.favorite;
+  // Explicit derived approval wins; otherwise inherit the referenced base.
   const approval = override.approval ?? base.approval;
   if (approval !== undefined) merged.approval = approval;
   const options = mergeOptions(base.options, override.options);
@@ -154,63 +157,22 @@ export function mergeActionEntry(
   return merged;
 }
 
-/**
- * Last definition of a label wins within one layer; order follows first
- * occurrence. Exported because folder sources (T66) are independent layers
- * that never merge across files but do dedupe within their own file.
- */
+/** Exclude every occurrence of a duplicate label, preserving unique entry order. */
 export function dedupeByLabel(entries: ActionEntryConfig[]): ActionEntryConfig[] {
-  const byLabel = new Map<string, ActionEntryConfig>();
-  for (const entry of entries) byLabel.set(entry.label, entry);
-  return [...byLabel.values()];
+  const counts = new Map<string, number>();
+  for (const entry of entries) counts.set(entry.label, (counts.get(entry.label) ?? 0) + 1);
+  return entries.filter((entry) => counts.get(entry.label) === 1);
 }
 
-/**
- * Merge the layers by label (priority: global < workspace < session, T47).
- * Matched entries merge field-wise and take the higher layer's identity;
- * unmatched entries keep their own layer. Result order: global entries
- * (merged where matched) in global order, then workspace-only entries, then
- * session-only entries.
- */
+/** Independent sources in global/workspace/session file order; no implicit inheritance. */
 export function mergeActionEntries(
   globalEntries: ActionEntryConfig[],
   workspaceEntries: ActionEntryConfig[],
   sessionEntries: ActionEntryConfig[] = [],
 ): MergedActionEntry[] {
-  const workspaceList = dedupeByLabel(workspaceEntries);
-  const workspaceByLabel = new Map(workspaceList.map((entry) => [entry.label, entry]));
-  const sessionByLabel = new Map(dedupeByLabel(sessionEntries).map((entry) => [entry.label, entry]));
-
-  const merged: MergedActionEntry[] = [];
-  for (const globalEntry of dedupeByLabel(globalEntries)) {
-    // Layer the higher overrides in turn: session wins over workspace wins over global.
-    const sessionOverride = sessionByLabel.get(globalEntry.label);
-    const workspaceOverride = workspaceByLabel.get(globalEntry.label);
-    if (sessionOverride !== undefined) {
-      const base = workspaceOverride === undefined ? globalEntry : mergeActionEntry(globalEntry, workspaceOverride);
-      merged.push({ entry: mergeActionEntry(base, sessionOverride), layer: 'session' });
-      sessionByLabel.delete(globalEntry.label);
-      workspaceByLabel.delete(globalEntry.label);
-    } else if (workspaceOverride !== undefined) {
-      merged.push({ entry: mergeActionEntry(globalEntry, workspaceOverride), layer: 'workspace' });
-      workspaceByLabel.delete(globalEntry.label);
-    } else {
-      merged.push({ entry: globalEntry, layer: 'global' });
-    }
-  }
-  for (const entry of workspaceList) {
-    if (!workspaceByLabel.has(entry.label)) continue;
-    const sessionOverride = sessionByLabel.get(entry.label);
-    if (sessionOverride !== undefined) {
-      merged.push({ entry: mergeActionEntry(entry, sessionOverride), layer: 'session' });
-      sessionByLabel.delete(entry.label);
-    } else {
-      merged.push({ entry, layer: 'workspace' });
-    }
-    workspaceByLabel.delete(entry.label);
-  }
-  for (const entry of dedupeByLabel(sessionEntries)) {
-    if (sessionByLabel.has(entry.label)) merged.push({ entry, layer: 'session' });
-  }
-  return merged;
+  return [
+    ...dedupeByLabel(globalEntries).map((entry) => ({ entry, layer: 'global' as const })),
+    ...dedupeByLabel(workspaceEntries).map((entry) => ({ entry, layer: 'workspace' as const })),
+    ...dedupeByLabel(sessionEntries).map((entry) => ({ entry, layer: 'session' as const })),
+  ];
 }

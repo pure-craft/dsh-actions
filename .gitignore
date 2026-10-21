@@ -6,6 +6,7 @@ coverage/
 *.log
 .pnpm-store/
 .workbuddy/
+.cache/
 pnpm-workspace.yaml
 .npmrc
 

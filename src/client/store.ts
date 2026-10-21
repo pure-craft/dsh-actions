@@ -5,6 +5,7 @@
  */
 import type {
   ActionInputConfig,
+  ActionSourceLayer,
   ActionPanelMode,
   ActionRunStatus,
   ActionRunSummary,
@@ -86,6 +87,9 @@ export interface PanelState {
   workspaceCollapsed: boolean;
   /** Last user-initiated operation failure, cleared on the next operation. */
   actionError: boolean;
+  presentationPending: boolean;
+  /** Sticky until explicitly dismissed; run/refresh operations never clear these. */
+  presentationErrors: Array<{ id: number; conflict: boolean; message: string }>;
 }
 
 /**
@@ -168,6 +172,9 @@ export class PanelStore {
   /** Session each subscription loop is currently watching ('' = none). */
   private readonly watching: Record<'runs' | 'catalog', string> = { runs: '', catalog: '' };
   private revision = 0;
+  private presentationQueue: Promise<void> = Promise.resolve();
+  private presentationErrorId = 0;
+  private catalogEpoch = 0;
   private stateValue: PanelState = {
     phase: 'loading',
     refreshing: false,
@@ -187,6 +194,8 @@ export class PanelStore {
     deleteConfirm: null,
     workspaceCollapsed: false,
     actionError: false,
+    presentationPending: false,
+    presentationErrors: [],
   };
 
   constructor(api: ActionsApi) {
@@ -251,6 +260,8 @@ export class PanelStore {
       closeRunConfirm: null,
       deleteConfirm: null,
       actionError: false,
+      presentationPending: false,
+      presentationErrors: [],
     });
     void this.refresh();
     this.startDiscovery(sessionId);
@@ -302,12 +313,13 @@ export class PanelStore {
   async refresh(): Promise<void> {
     if (this.stateValue.sessionId === '') return;
     const signal = this.signal; // captured: a session switch must not let this write back
+    const epoch = this.catalogEpoch;
     const first = this.stateValue.phase === 'loading';
     this.update({ refreshing: true, actionError: false });
     try {
       const catalog = await this.api.listCatalog(this.stateValue.sessionId, signal);
       if (signal.aborted) return;
-      this.applyCatalog(catalog);
+      if (epoch === this.catalogEpoch) this.applyCatalog(catalog);
       this.update({ refreshing: false });
     } catch {
       if (signal.aborted) return;
@@ -322,6 +334,7 @@ export class PanelStore {
    * and repairs the action/run selection when entries disappear.
    */
   private applyCatalog(catalog: ActionsCatalog): void {
+    this.catalogEpoch += 1;
     // Adopt runs reported by the catalog without clobbering streamed output.
     const runs = { ...this.stateValue.runs };
     const runIdsByAction = { ...this.stateValue.runIdsByAction };
@@ -363,6 +376,68 @@ export class PanelStore {
     // Opening the tab (or a resync) must load the selected run's output —
     // before this, a fresh tab showed the latest terminal run with no output.
     if (selectedRunId !== null) void this.ensureRunLoaded(selectedRunId);
+  }
+
+  /** Serialize display writes so every request uses the latest source revision. */
+  private enqueuePresentation(
+    sourceLayer: ActionSourceLayer,
+    folder: string | undefined,
+    change: { actionId?: string; favorite?: boolean; labels?: string[] },
+  ): Promise<boolean> {
+    const signal = this.signal;
+    const sessionId = this.stateValue.sessionId;
+    const task = this.presentationQueue.then(async () => {
+      if (signal.aborted || sessionId === '') return false;
+      this.update({ presentationPending: true });
+      try {
+        const source = this.stateValue.catalog?.sources.find((item) => item.layer === sourceLayer && item.folder === folder);
+        if (source?.revision === undefined) throw new Error('Source revision unavailable; refresh the catalog.');
+        const epoch = this.catalogEpoch;
+        const catalog = await this.api.updatePresentation({
+          sessionId, sourceLayer, expectedRevision: source.revision,
+          ...(folder === undefined ? {} : { folder }), ...change,
+        }, signal);
+        if (signal.aborted) return false;
+        // Never replay the response's run snapshot: output, tabs and selection
+        // belong to the run streams, not to a presentation-only operation.
+        if (epoch === this.catalogEpoch) {
+          this.catalogEpoch += 1;
+          const current = this.stateValue.catalog;
+          if (current !== null) this.update({ catalog: { ...current, actions: catalog.actions, sources: catalog.sources } });
+        } else {
+          await this.refresh(); // a newer event won; resolve authoritative revision before next write
+        }
+        return true;
+      } catch (error) {
+        if (!signal.aborted) this.update({ presentationErrors: [...this.stateValue.presentationErrors, {
+          id: ++this.presentationErrorId,
+          conflict: error instanceof ActionsApiError && error.status === 409,
+          message: error instanceof Error ? error.message : String(error),
+        }] });
+        return false;
+      } finally {
+        if (!signal.aborted) this.update({ presentationPending: false });
+      }
+    });
+    this.presentationQueue = task.then(() => undefined);
+    return task;
+  }
+
+  setFavorite(actionId: string, favorite: boolean): Promise<boolean> {
+    const action = this.stateValue.catalog?.actions.find((item) => item.id === actionId);
+    return action === undefined ? Promise.resolve(false)
+      : this.enqueuePresentation(action.sourceLayer, action.folder, { actionId, favorite });
+  }
+
+  reorderActions(sourceLayer: ActionSourceLayer, folder: string | undefined, labels: string[]): Promise<boolean> {
+    const own = this.stateValue.catalog?.actions.filter((item) => item.sourceLayer === sourceLayer && item.folder === folder) ?? [];
+    if (labels.length !== own.length || new Set(labels).size !== own.length
+      || own.some((item) => !labels.includes(item.label))) return Promise.resolve(false);
+    return this.enqueuePresentation(sourceLayer, folder, { labels: [...labels] });
+  }
+
+  dismissPresentationError(id: number): void {
+    this.update({ presentationErrors: this.stateValue.presentationErrors.filter((item) => item.id !== id) });
   }
 
   /** Select an action; the detail view defaults to its newest run. */

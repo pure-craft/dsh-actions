@@ -63,12 +63,12 @@ export function buildActionBadges(action: ProjectActionSummary, t: Translate): A
     });
   }
 
-  if (action.visibility === 'ui') {
+  if (!action.agentVisible) {
     badges.push({
       key: 'visibility-ui',
       text: t('badgeVisibilityUi'),
       tone: 'quiet',
-      title: t('badgeTipVisibility', { value: 'ui' }),
+      title: t('badgeTipVisibility', { value: 'false' }),
     });
   }
 

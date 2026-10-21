@@ -4,7 +4,7 @@
 
 > Back to [README](https://github.com/pure-craft/dsh-actions/blob/main/README.en.md) ｜ related: scenarios ([Curating scattered script entry points](https://github.com/pure-craft/dsh-actions/blob/main/docs/scenarios/01-curate-scripts.en.md) / [CI pipeline](https://github.com/pure-craft/dsh-actions/blob/main/docs/scenarios/02-ci-pipeline.en.md) / [Session scratchpad](https://github.com/pure-craft/dsh-actions/blob/main/docs/scenarios/03-session-scratchpad.en.md)) ｜ [The panel](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/panel.en.md) ｜ [The session layer](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/session-layer.en.md)
 
-The single source of Action definitions is a standalone `actions.json` (**JSONC** — comments and trailing commas are allowed). It is read from three layers, merged in increasing priority:
+The single source of Action definitions is a standalone `actions.json` (**JSONC** — comments and trailing commas are allowed). It is read from three independent layers:
 
 | Layer | Path | Applies to |
 | --- | --- | --- |
@@ -20,10 +20,13 @@ The top level may also contain session-only `folders: string[]`: it loads each l
 
 | Field | Required | Meaning |
 | --- | --- | --- |
-| `label` | yes | display name; also the cross-layer merge key and the basis of the stable id (`<layer>:<label>`) |
+| `label` | yes | display name and stable-id basis (`<layer>:<label>`); unique within one source file |
 | `command` | yes (may be omitted on an `extends` entry, which inherits the base definition) | shell command, run through `shell -c` under the entry- and approval-selected permissions; may reference `${input:id}` |
 | `detail` | no | one-line description, shown in the panel and by `actions_query` alike — **the agent judges whether a task fits by this line, so always write it** |
-| `visibility` | no | `all` (default, panel + agent) / `ui` (panel only) / `agent` (agent tools only) |
+| `agentVisible` | no | boolean, default true; false excludes Agent discovery/execution, not the panel |
+| `favorite` | no | UI-only favorite flag, default false; never inherited through `extends` |
+| `icon` | no | UI-only Iconify icon code; omitted from normal Agent projections along with `favorite` |
+| `visibility` | no | deprecated: `ui` maps to false, `all`/`agent` to true; explicit `agentVisible` wins; load emits warnings |
 | `approval` | no | `never` (default) / `agent` / `always` — the approval requirement before a run, see below |
 | `options.cwd` | no | working directory, relative to the workspace root (default: the workspace root) |
 | `options.env` | no | extra environment variables |
@@ -72,13 +75,13 @@ For panel behavior detail, see [the panel](https://github.com/pure-craft/dsh-act
 
 `extends: "<layer>:<label>"` references another Action visible in this session as the base definition: it inherits that Action's `command` / `options` / `inputs` / `runOptions` and so on, and fields written on this entry override them. Resolution rules:
 
-- it resolves against **each layer's original entries** (before merging) — an entry that a higher layer overrides can still be referenced explicitly, so `extends: "global:build"` hits the global file's own `build`;
+- references resolve against source-qualified original entries: `extends: "global:build"` always means the global definition, independently of other same-label entries;
 - chained inheritance (a extends b extends c) does not depend on declaration order;
 - when a reference cannot be resolved the entry is kept with a marker, and running it reports `unknown-extends`.
 
-## Merge rules and fault tolerance
+## Independent sources and fault tolerance
 
-Entries with the same `label` merge field by field across layers (VS Code assign semantics): a field the higher layer writes overrides, one it does not write is inherited; `options.env` merges by key, `inputs` merges by `id`, and `extends` follows this entry's own reference. An entry missing `label`/`command` or carrying an invalid field → that entry is skipped and a source-level error is recorded, everything else loads normally; the degradation reason and error detail are shown in the panel's source banner.
+All sources are independent. Same-label Actions across layers coexist, without overriding or inheriting fields. Reuse requires explicit `extends`; within that inheritance, `options.env` merges by key and `inputs` by `id`, but `favorite` never inherits. All occurrences of a duplicate label within one file are excluded with source errors; other labels still load. Invalid entries have field-specific errors. Configuration inspection/writes reject duplicate-label files with `invalid-file`, never silently choosing one occurrence.
 
 ## Variable substitution and when changes take effect
 

@@ -9,7 +9,7 @@ const ACTION: ProjectActionSummary = {
   id: 'workspace:build',
   label: 'build',
   sourceLayer: 'workspace',
-  visibility: 'all',
+  agentVisible: true,
   approval: 'never',
   command: 'echo hi',
   cwd: '/repo',
@@ -108,6 +108,7 @@ function createDeps(overrides: Partial<ActionsApiDeps> = {}): ActionsApiDeps & {
   if (overrides.watchSession !== undefined) deps.watchSession = overrides.watchSession;
   if (overrides.watchFolder !== undefined) deps.watchFolder = overrides.watchFolder;
   if (overrides.deleteActionEntry !== undefined) deps.deleteActionEntry = overrides.deleteActionEntry;
+  if (overrides.updatePresentation !== undefined) deps.updatePresentation = overrides.updatePresentation;
   return deps;
 }
 
@@ -321,24 +322,49 @@ describe('catalog endpoint', () => {
     deps.runs.dispose();
   });
 
-  it('hides agent-only actions and their runs from the web channel', async () => {
-    const agentOnly: ProjectActionSummary = { ...ACTION, id: 'workspace:secret', label: 'secret', visibility: 'agent' };
+  it('shows Agent-invisible actions in the web channel', async () => {
+    const agentOnly: ProjectActionSummary = { ...ACTION, id: 'workspace:secret', label: 'secret', agentVisible: false };
     const deps = createDeps({ loadCatalog: async () => catalog([ACTION, agentOnly]) });
     await startRun(deps, 'session-1');
 
     const response = await route(deps, ACTIONS_API_PATHS.catalog).fetch(post({ workspace: '/repo' }));
     const body = (await response.json()) as ActionsCatalog;
-    expect(body.actions.map((action) => action.id)).toEqual([ACTION.id]);
+    expect(body.actions.map((action) => action.id)).toEqual([ACTION.id, agentOnly.id]);
     deps.runs.dispose();
   });
 
-  it('rejects run requests for agent-only actions as not found', async () => {
-    const agentOnly: ProjectActionSummary = { ...ACTION, id: 'workspace:secret', label: 'secret', visibility: 'agent' };
+  it('allows manual runs of Agent-invisible actions', async () => {
+    const agentOnly: ProjectActionSummary = { ...ACTION, id: 'workspace:secret', label: 'secret', agentVisible: false };
     const deps = createDeps({ loadCatalog: async () => catalog([ACTION, agentOnly]) });
     const response = await route(deps, ACTIONS_API_PATHS.runs).fetch(
       post({ sessionId: 'session-1', actionId: agentOnly.id }),
     );
-    expect(response.status).toBe(404);
+    expect(response.status).toBe(200);
+    deps.runs.dispose();
+  });
+});
+
+describe('presentation endpoint', () => {
+  const source = { layer: 'workspace' as const, path: '/repo/.dsh/actions.json', available: true, exists: true, errors: [], revision: 'current' };
+  it('writes only the resolved source path and returns the catalog', async () => {
+    const writes: unknown[] = [];
+    const deps = createDeps({ loadCatalog: async () => ({ ...catalog(), sources: [source] }), updatePresentation: async (path, change) => { writes.push({ path, change }); } });
+    const response = await route(deps, ACTIONS_API_PATHS.presentation).fetch(post({ sessionId: 'session-1', sourceLayer: 'workspace', actionId: ACTION.id, expectedRevision: 'current', favorite: true, path: '/untrusted' }));
+    expect(response.status).toBe(200);
+    expect(writes).toEqual([{ path: source.path, change: { expectedRevision: 'current', label: 'build', favorite: true } }]);
+    expect(await response.json()).toHaveProperty('catalog');
+    deps.runs.dispose();
+  });
+  it('rejects stale, mixed, foreign-source and missing-session requests', async () => {
+    let writes = 0;
+    const deps = createDeps({ loadCatalog: async () => ({ ...catalog(), sources: [source] }), updatePresentation: async () => { writes++; } });
+    const base = { sessionId: 'session-1', sourceLayer: 'workspace', actionId: ACTION.id, expectedRevision: 'current', favorite: true };
+    expect((await route(deps, ACTIONS_API_PATHS.presentation).fetch(post({ ...base, expectedRevision: 'old' }))).status).toBe(409);
+    expect((await route(deps, ACTIONS_API_PATHS.presentation).fetch(post({ ...base, labels: ['build'] }))).status).toBe(400);
+    expect((await route(deps, ACTIONS_API_PATHS.presentation).fetch(post({ ...base, actionId: 'global:build' }))).status).toBe(404);
+    expect((await route(deps, ACTIONS_API_PATHS.presentation).fetch(post({ ...base, sessionId: 'unknown' }))).status).not.toBe(200);
+    expect(writes).toBe(0);
+    deps.runs.dispose();
   });
 });
 

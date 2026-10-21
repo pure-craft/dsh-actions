@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.5.0 — 2026-10-21
+
+### Added
+
+- Reorder Actions within their source section by dragging the row, with live previews, smooth reduced-motion-aware animations and a keyboard-only sorting control.
+- Toggle always-visible favorite stars. `favorite` is stored in the source definition, does not pin or reorder entries, does not inherit through `extends`, and is omitted from normal Agent output.
+- Presentation writes preserve JSONC comments and unrelated fields, use source revisions to reject stale changes, and leave running processes and run tabs untouched.
+
+### Fixed
+
+- Global, workspace and session sources now remain independent: same-label Actions coexist under source-qualified ids instead of silently merging. Duplicate labels within one file are reported and all conflicting entries are excluded; other valid entries remain available.
+
+### Configuration migration
+
+- Use `agentVisible` (default `true`) instead of `visibility`. All valid Actions are always visible in the UI.
+- Legacy `visibility` values remain readable with per-source migration warnings: `ui` maps to `agentVisible: false`; `all` and `agent` map to `true`. An explicit `agentVisible` takes precedence. Configuration version remains `1.0.0`.
+- Configurations that relied on implicit same-label merging must provide complete definitions or use explicit `extends` references. Deleting an entry no longer reveals a lower-layer fallback.
+
+### Verified
+
+- Typecheck, lint and 480 automated tests passed; Host and Client production bundles built successfully.
+- Local user acceptance covered ordering, favorites and the refined drag interaction. Automated checks cover configuration, RPC, store and source-level UI contracts; they are not browser drag simulation.
+
 ## 0.4.1 — 2026-10-18
 
 ### Fixed

@@ -4,12 +4,12 @@
 
 > Back to [README](https://github.com/pure-craft/dsh-actions/blob/main/README.en.md) ｜ related: [Configuration reference](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/configuration.en.md) ｜ [Agent integration](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/agent-integration.en.md) ｜ scenario: [The session scratchpad](https://github.com/pure-craft/dsh-actions/blob/main/docs/scenarios/03-session-scratchpad.en.md)
 
-The top layer of the three-layer model: the session layer. It answers the "this task only makes sense in this session" case — one-off commands, pinning a task's parameters to one setting, a workflow the agent just worked out in-session.
+One independent source in the three-layer model: the session layer. It answers the "this task only makes sense in this session" case — one-off commands, pinning a task's parameters to one setting, a workflow the agent just worked out in-session.
 
 ## Storage and visibility
 
 - Path: `<dshHome>/sessions/<projectKey(cwd)>/<sessionId>/actions.json` — it reuses the host's session persistence layout and lives in the session's own directory.
-- Visible to that session only: merge priority is global < workspace < session, and the session layer wins every merge it takes part in.
+- Visible to that session only; sources are independent and same-label entries do not override each other.
 - **An empty layer is a normal state**: before the first registration the file does not exist (`available: true` + `exists: false`); the panel hides the "open config" button based on the `exists` signal, and the file appears once the first task is registered.
 
 ## Dynamic Action directories: `folders`
@@ -53,12 +53,12 @@ Because the definitions stay in the repositories, the panel offers no delete ent
 The agent writes new tasks into the session layer through `actions_configure`, and **registration always requires user approval** (an agent authoring an executable command for itself is high-risk by definition). Two granularities are supported:
 
 - a standalone command: a complete new task definition;
-- a variant: `extends: "<layer>:<label>"` inherits an existing task's definition (cwd/env/inputs/runOptions and so on), with `params` pinning one setting — for example deriving a session-only "deploy to staging" variant from `workspace:deploy`.
+- a variant: `extends: "<layer>:<label>"` inherits an existing task's definition (cwd/env/inputs/runOptions and so on), with derived `inputs` defaults selecting one setting — for example deriving a session-only "deploy to staging" variant from `workspace:deploy`.
 
-`extends` resolves against each layer's original entries (an entry a higher layer overrode can still be referenced explicitly); chained inheritance does not depend on declaration order; when a reference cannot be resolved, running reports `unknown-extends`. Detail is in the [configuration reference](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/configuration.en.md).
+`extends` resolves against each layer's original entries (sources do not implicitly override each other); chained inheritance does not depend on declaration order; when a reference cannot be resolved, running reports `unknown-extends`. Detail is in the [configuration reference](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/configuration.en.md).
 
 ## Lifecycle and promotion
 
 - The session layer file lives and dies with the session directory; different sessions cannot see each other's.
 - Run parameters come only from explicit values for that run and the Action's declared `default`; there is no session parameter memory or hidden parameter source.
-- Session tasks that prove themselves should be promoted to a file layer: the panel's session section offers a review and "promote" entry (review-and-persist); once a person confirms, it is written into the workspace/global config and goes through the normal git review.
+- Session tasks that prove themselves should be promoted to a file layer: ask the Agent to create an equivalent workspace/global definition through `actions_configure`, then delete the original session entry after approval and verification, following normal git review. The panel currently has no direct promotion control.

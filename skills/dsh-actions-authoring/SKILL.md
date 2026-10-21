@@ -1,6 +1,6 @@
 ---
 name: dsh-actions-authoring
-description: Use whenever discovering, running, monitoring, cancelling, creating, updating, or deleting DSH Actions, or when authoring actions.json definitions. Covers actions_query/actions_run/actions_cancel/actions_configure, layer precedence, inputs, approvals, and run conflicts.
+description: Use whenever discovering, running, monitoring, cancelling, creating, updating, or deleting DSH Actions, or when authoring actions.json definitions. Covers actions_query/actions_run/actions_cancel/actions_configure, independent sources, inputs, approvals, and run conflicts.
 ---
 
 # DSH Actions authoring guide
@@ -10,6 +10,8 @@ DSH Actions exposes one deterministic task definition to people in the Web panel
 ## Core constraints
 
 - Definitions live only in `~/.dsh/actions.json`, `<workspace>/.dsh/actions.json`, the session layer, or a session-selected folder. Do not create a second registry.
+- Sources are independent: same-label entries across layers coexist; reuse requires explicit `extends`. Duplicate labels within one file are all excluded and reported.
+- `agentVisible` defaults to true; `favorite` is UI-only and never inherits.
 - Every file declares `"version": "1.0.0"`.
 - Runs are session-owned. The Host never interrupts an active run implicitly; stop it with `actions_cancel` before rerunning.
 - Respect `approval-declined`; never retry or bypass approval through shell.

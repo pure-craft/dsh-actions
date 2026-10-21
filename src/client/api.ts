@@ -21,6 +21,7 @@ import { ACTIONS_PLUGIN_ID } from '../contract.js';
 import type {
   ActionRunSummary,
   ActionsCatalog,
+  ActionSourceLayer,
   CatalogEventFrame,
   RunDiscoveryFrame,
   RunStartResult,
@@ -51,7 +52,19 @@ export interface RunInspection {
 // consumers (store) keep their import site.
 export type { CatalogEventFrame, RunDiscoveryFrame };
 
+export interface PresentationUpdate {
+  sessionId: string;
+  actionId?: string;
+  sourceLayer: ActionSourceLayer;
+  folder?: string;
+  expectedRevision: string;
+  favorite?: boolean;
+  labels?: string[];
+}
+
 export interface ActionsApi {
+  /** Human-only display edits; writes the owning source with revision fencing. */
+  updatePresentation(request: PresentationUpdate, signal?: AbortSignal): Promise<ActionsCatalog>;
   /** @param sessionId - the panel-bound session; the Host resolves its workspace cwd (T11). */
   listCatalog(sessionId: string, signal?: AbortSignal): Promise<ActionsCatalog>;
   /**
@@ -155,6 +168,11 @@ export function createHttpApi(base: string = ACTIONS_API_BASE): ActionsApi {
     });
 
   return {
+    async updatePresentation(request, signal) {
+      const value = await postJson(`${base}/actions/presentation`, request, signal);
+      if (typeof value !== 'object' || value === null) throw new Error('invalid presentation payload');
+      return parseActionsCatalog((value as Record<string, unknown>).catalog);
+    },
     async listCatalog(sessionId, signal) {
       return parseActionsCatalog(await postJson(`${base}/catalog`, { sessionId }, signal));
     },

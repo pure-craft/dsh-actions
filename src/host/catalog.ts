@@ -42,9 +42,9 @@ function clampInstanceLimit(limit: number): number {
 }
 
 /**
- * Normalize one merged config entry into a `ProjectActionSummary`:
+ * Normalize one resolved config entry into a `ProjectActionSummary`:
  * variable substitution, defaults, absolute cwd, and the stable id
- * `<layer>:<label>` (merged entries carry the workspace layer).
+ * `<layer>:<label>`.
  *
  * `${input:id}` placeholders stay verbatim here — inputs are declared on the
  * summary and resolved per run via `normalizeParams` + `substituteVariables`
@@ -71,7 +71,8 @@ export function normalizeActionEntry(
     id: scope?.id ?? `${layer}:${entry.label}`,
     label: entry.label,
     sourceLayer: layer,
-    visibility: entry.visibility ?? 'all',
+    agentVisible: entry.agentVisible ?? (entry.visibility === undefined || entry.visibility !== 'ui'),
+    favorite: entry.favorite ?? false,
     approval: entry.approval ?? 'never',
     // Orphan extends entries (unresolved reference) keep the ref on the
     // summary and answer unknown-extends at run time; give them a placeholder
@@ -250,8 +251,8 @@ async function resolveFolderSources(
 
 /**
  * Load the configuration layers for `workspace` (global + workspace, plus the
- * caller session's layer when `sessionId` is given — T47), merge them by
- * label (session wins), and normalize into the catalog. `runs` is left
+ * caller session's layer when `sessionId` is given — T47), keep all sources
+ * independent, resolve explicit inheritance, and normalize into the catalog. `runs` is left
  * empty; the run service owns it. Never throws: every failure degrades into
  * `sources[]` statuses.
  *

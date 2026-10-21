@@ -9,7 +9,7 @@ import type { ActionLayerStoreLike, ApprovalServiceLike, ToolDefinitionLike, Too
 import { createActionToolDefinitions } from '../src/host/tools/index.js';
 
 function action(overrides: Partial<ProjectActionSummary> = {}): ProjectActionSummary {
-  return { id: 'workspace:build', label: 'build', sourceLayer: 'workspace', visibility: 'all', approval: 'never', command: 'pnpm build', cwd: '/ws', runOptions: { instanceLimit: 1, instancePolicy: 'reuse' }, ...overrides };
+  return { id: 'workspace:build', label: 'build', sourceLayer: 'workspace', agentVisible: true, approval: 'never', command: 'pnpm build', cwd: '/ws', runOptions: { instanceLimit: 1, instancePolicy: 'reuse' }, ...overrides };
 }
 function run(overrides: Partial<ActionRunSummary> = {}): ActionRunSummary { return { id: 'run-1', actionId: 'workspace:build', workspace: '/ws', sessionId: 's1', status: 'running', startedAt: 1, ...overrides }; }
 class Runs implements RunService {
@@ -56,8 +56,41 @@ describe('public tool contract', () => {
 });
 
 describe('actions_query', () => {
-  it('defaults to catalog and filters ui-only actions', async () => { const { get, exec } = fixture({ actions: [action(), action({ id: 'workspace:hidden', label: 'hidden', visibility: 'ui' })] }); const value = await get('actions_query').execute({}, exec) as { actions: unknown[] }; expect(value.actions).toHaveLength(1); });
+  it('defaults to catalog and filters ui-only actions', async () => { const { get, exec } = fixture({ actions: [action(), action({ id: 'workspace:hidden', label: 'hidden', agentVisible: false })] }); const value = await get('actions_query').execute({}, exec) as { actions: unknown[] }; expect(value.actions).toHaveLength(1); });
+  it('does not reveal Agent-invisible manual-run snapshots by run id', async () => {
+    const { get, exec, runs } = fixture();
+    runs.snapshot = action({ agentVisible: false }); runs.rows.push(run());
+    await rejectsCode(get('actions_query').execute({ selector: { kind: 'run', runId: 'run-1' } }, exec), 'run-not-found');
+  });
+  it('reports invalid-source diagnostics in catalog queries', async () => {
+    const runs = new Runs();
+    const tools = createActionToolDefinitions({ catalog: { loadCatalog: async (workspace) => ({ apiVersion: 1, workspace, actions: [], runs: [], sources: [{ layer: 'workspace', path: '/ws/.dsh/actions.json', available: true, errors: ['actions[0].label: duplicate label'] }] }) }, runs });
+    const result = await tools.find((tool) => tool.name === 'actions_query')!.execute({}, fixture().exec);
+    expect(result).toMatchObject({ actions: [], sources: [{ layer: 'workspace', errors: ['actions[0].label: duplicate label'] }] });
+  });
   it('returns effective action and raw layers with revisions', async () => { const { get, exec, layers } = fixture(); layers.entries.set('workspace:build', { label: 'build', command: 'pnpm build' }); const value = await get('actions_query').execute({ selector: { kind: 'action', actionId: 'workspace:build', view: 'layers' } }, exec) as { layers: unknown[] }; expect(value.layers).toHaveLength(3); expect(value.layers[1]).toMatchObject({ layer: 'workspace', entryRevision: 'entry-rev' }); });
+  it('never exposes another source hidden from agents through layers', async () => {
+    const { get, exec, layers } = fixture();
+    layers.entries.set('global:build', { label: 'build', command: 'secret command', agentVisible: false });
+    layers.entries.set('workspace:build', { label: 'build', command: 'pnpm build' });
+    const value = await get('actions_query').execute({ selector: { kind: 'action', actionId: 'workspace:build', view: 'layers' } }, exec);
+    expect(JSON.stringify(value)).not.toContain('secret command');
+    expect(value).toMatchObject({ layers: [{ layer: 'workspace' }, { layer: 'session' }] });
+  });
+  it('also hides raw entries whose explicit base makes them agent-invisible', async () => {
+    const { get, exec, layers } = fixture({ actions: [action(), action({ id: 'global:build', sourceLayer: 'global', agentVisible: false })] });
+    layers.entries.set('global:build', { label: 'build', extends: 'global:hidden-base', detail: 'private inherited entry' });
+    const value = await get('actions_query').execute({ selector: { kind: 'action', actionId: 'workspace:build', view: 'layers' } }, exec);
+    expect(JSON.stringify(value)).not.toContain('private inherited entry');
+  });
+  it('omits favorite and icon from normal action and run projections', async () => {
+    const { get, exec, runs } = fixture({ actions: [action({ favorite: true, icon: 'lucide:star' })] });
+    runs.snapshot = action({ favorite: true, icon: 'lucide:star' }); runs.rows.push(run());
+    for (const selector of [{ kind: 'action', actionId: 'workspace:build' }, { kind: 'run', runId: 'run-1' }]) {
+      const value = await get('actions_query').execute({ selector }, exec);
+      expect(value).toHaveProperty('action'); expect(value).not.toHaveProperty('action.favorite'); expect(value).not.toHaveProperty('action.icon');
+    }
+  });
   it('enforces run ownership and honors byte offset', async () => { const { get, exec, runs } = fixture(); runs.rows.push(run()); const value = await get('actions_query').execute({ selector: { kind: 'run', runId: 'run-1', offset: 2 } }, exec) as RunInspection; expect(value.output).toMatchObject({ text: 'llo', offset: 2, nextOffset: 5 }); runs.rows[0]!.sessionId = 'other'; await rejectsCode(get('actions_query').execute({ selector: { kind: 'run', runId: 'run-1' } }, exec), 'run-not-found'); });
 });
 
@@ -71,7 +104,7 @@ describe('actions_configure', () => {
   it('creates in the calling workspace and session without caller-supplied ids or revisions', async () => { const layers = new Layers(); const { get, exec } = fixture({ approval, layers }); const value = await get('actions_configure').execute({ operation: 'create', layer: 'session', definition: { label: 'current', command: 'echo current' } }, exec) as { configured: boolean }; expect(value.configured).toBe(true); expect(layers.workspaces).toEqual(['/ws']); expect(layers.createdSessions).toEqual(['s1']); expect(layers.entries.get('session:current')).toMatchObject({ command: 'echo current' }); });
   it('does not expose expectedStoreRevision in the create contract', () => { const configure = fixture({ approval }).get('actions_configure'); const properties = (configure.parameters as { properties: Record<string, unknown> }).properties; expect(properties).not.toHaveProperty('expectedStoreRevision'); });
   it('updates a raw entry with typed changes', async () => { const { get, exec, layers } = fixture({ approval }); layers.entries.set('workspace:build', { label: 'build', command: 'pnpm build' }); await get('actions_configure').execute({ operation: 'update', layer: 'workspace', actionId: 'workspace:build', expectedRevision: 'entry-rev', changes: [{ operation: 'set-field', field: 'detail', value: 'Build project' }] }, exec); expect(layers.entries.get('workspace:build')).toMatchObject({ detail: 'Build project' }); });
-  it('requires acknowledgement when delete exposes a lower layer', async () => { const { get, exec, layers } = fixture({ approval }); layers.entries.set('session:build', { label: 'build', command: 'session build' }); layers.entries.set('workspace:build', { label: 'build', command: 'workspace build' }); const first = await get('actions_configure').execute({ operation: 'delete', layer: 'session', actionId: 'session:build', expectedRevision: 'entry-rev' }, exec) as { reason: string }; expect(first.reason).toBe('fallback-ack-required'); expect(layers.entries.has('session:build')).toBe(true); await get('actions_configure').execute({ operation: 'delete', layer: 'session', actionId: 'session:build', expectedRevision: 'entry-rev', acknowledgeFallback: true }, exec); expect(layers.entries.has('session:build')).toBe(false); });
+  it('deletes only its independent source without fallback acknowledgement', async () => { const { get, exec, layers } = fixture({ approval }); layers.entries.set('session:build', { label: 'build', command: 'session build' }); layers.entries.set('workspace:build', { label: 'build', command: 'workspace build' }); const result = await get('actions_configure').execute({ operation: 'delete', layer: 'session', actionId: 'session:build', expectedRevision: 'entry-rev' }, exec); expect(result).toMatchObject({ configured: true }); expect(result).not.toHaveProperty('fallback'); expect(layers.entries.has('session:build')).toBe(false); expect(layers.entries.has('workspace:build')).toBe(true); });
   it('fails closed without approval', async () => { const { get, exec } = fixture(); const value = await get('actions_configure').execute({ operation: 'create', layer: 'session', definition: { label: 'diag', command: 'echo ok' } }, exec) as { reason: string; outcome: string }; expect(value).toMatchObject({ reason: 'approval-declined', outcome: 'unavailable' }); });
   it('rejects cross-layer ids and missing revisions', async () => { const { get, exec, layers } = fixture({ approval }); layers.entries.set('workspace:build', { label: 'build', command: 'pnpm build' }); await rejectsCode(get('actions_configure').execute({ operation: 'update', layer: 'workspace', actionId: 'session:build', expectedRevision: 'entry-rev', changes: [{ operation: 'set-field', field: 'detail', value: 'x' }] }, exec), 'invalid-arguments'); });
 });

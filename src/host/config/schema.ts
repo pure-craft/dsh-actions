@@ -48,6 +48,9 @@ export const actionEntrySchema = z
     label: z.string({ error: 'missing label' }).min(1, 'missing label'),
     command: z.string({ error: 'missing command' }).optional(),
     detail: z.string().optional(),
+    agentVisible: z.boolean().optional(),
+    favorite: z.boolean().optional(),
+    /** @deprecated Compatibility only; load emits migration warnings. */
     visibility: z.enum(['all', 'ui', 'agent']).optional(),
     approval: z.enum(['never', 'agent', 'always']).optional(),
     /** Iconify `set:name` icon code (ui-only; excluded from agent-facing views). */

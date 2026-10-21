@@ -10,13 +10,13 @@
     {
       "id": 2,
       "prompt": "Add a 'dev' action that runs the vite dev server for this project. Two requirements: it must be impossible to accidentally start a second instance, and it should be usable by agents but NOT show up as a button in the web panel.",
-      "expected_output": "Adds an entry with `runOptions.instancePolicy: \"reject\"` for exclusivity (not instanceLimit tricks, not documentation-only warnings) and `visibility: \"agent\"` to hide it from the panel while keeping tool access; valid JSONC with version gate; explains that 'rejected' is the structured outcome a duplicate request returns.",
+      "expected_output": "Adds runOptions.instancePolicy: \"reject\" for exclusivity. Explains that all Actions appear in the panel: agentVisible controls only Agent access, so agent-only hidden buttons are not supported. Does not claim legacy visibility: \"agent\" hides the panel; it maps to agentVisible:true with a migration warning. Uses valid versioned JSONC.",
       "files": []
     },
     {
       "id": 3,
       "prompt": "帮我把项目的 dev server 起起来，确认它真的启动成功之后把访问地址告诉我。",
-      "expected_output": "Runs actions_query → actions_run, keeps the returned runId, then polls actions_query (the actionId form with offset for incremental reads) and judges readiness from the actual log text (e.g. the 'Local: http://…' line) instead of inventing a health-check flag or assuming success after a fixed sleep; reports the URL read from the output.",
+      "expected_output": "Runs actions_query → actions_run, keeps the returned runId, then polls actions_query (the run selector with runId and offset for incremental reads) and judges readiness from the actual log text (e.g. the 'Local: http://…' line) instead of inventing a health-check flag or assuming success after a fixed sleep; reports the URL read from the output.",
       "files": []
     },
     {
@@ -77,6 +77,18 @@
       "id": 13,
       "prompt": "我在会话里选了两个仓库目录，但 panels 里看不到它们的任务。frontend 下有 .dsh/actions.json，backend 下确认没有这个文件。帮我看下为什么。",
       "expected_output": "Explains that a selected directory has no Actions when its own <folder>/.dsh/actions.json is absent — a normal empty source, not an error — and that the catalog lists each selected folder as a source (available with exists:false) while the panel names the directory in its own section. Checks the real reasons before concluding: the directory path as written (relative to the session workspace, so a typo silently selects a different directory), whether folders was written in the session layer rather than a workspace/global file (ignored with a source error there), whether the entry was the workspace root (refused), and whether the file failed to parse or has an unsupported version. Does not propose copying definitions or editing repository configs.",
+      "files": []
+    },
+    {
+      "id": 14,
+      "prompt": "Global and workspace both define build. Keep both; also session/actions.json has two duplicate test labels. What loads?",
+      "expected_output": "Global and workspace build coexist with distinct ids, no implicit merge. Every duplicate test occurrence within the session file is excluded with source errors. Reuse requires explicit extends; favorite never inherits. Inspection/writes of the duplicate-label file fail invalid-file until fixed.",
+      "files": []
+    },
+    {
+      "id": 15,
+      "prompt": "Delete session:build. workspace:build exists, and global:build is agentVisible:false. Do I need to acknowledge fallback?",
+      "expected_output": "No fallback exists: all sources are independent. Query layers for revision without exposing the hidden global raw entry, then delete only session:build with mandatory approval. Deprecated acknowledgeFallback is ignored; workspace:build remains unchanged.",
       "files": []
     }
   ]

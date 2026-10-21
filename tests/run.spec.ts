@@ -22,7 +22,7 @@ function makeAction(overrides: Partial<ProjectActionSummary> = {}): ProjectActio
     id: 'workspace:build',
     label: 'build',
     sourceLayer: 'workspace',
-    visibility: 'all',
+    agentVisible: true,
     approval: 'never',
     command: 'pnpm build',
     cwd: '/ws',

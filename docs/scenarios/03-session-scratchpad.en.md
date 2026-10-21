@@ -22,7 +22,7 @@ Agent: → actions_configure({ operation: "create", layer: "session", definition
 Once registered it appears in the panel's session section (`session:<label>`), one click to run and streaming output exactly like a file-layer task. Two granularities are supported:
 
 - **Standalone command**: a complete new task;
-- **Variant**: `extends` to inherit an existing task + `params` to pin values — for example deriving "deploy to staging (this session only)" from `workspace:deploy`.
+- **Variant**: `extends` to inherit an existing task + derived `inputs` defaults to select parameter values — for example deriving "deploy to staging (this session only)" from `workspace:deploy`.
 
 ## Lifecycle
 
@@ -31,4 +31,4 @@ Once registered it appears in the panel's session section (`session:<label>`), o
 
 ## From temporary to permanent: review-and-persist
 
-Do not let a good temporary task rot inside a session: the panel's session section offers a review entry, and when you confirm it is worth keeping, **promote it to a file layer** (written into the workspace or global `actions.json`), going through normal git review and becoming a shared project capability. That is exactly the evolution path DSH Actions wants: agent-driven discovery → trial inside the session → human review → pinned down and shared.
+Do not let a good temporary task rot inside a session: when you confirm it is worth keeping, ask the Agent to create an equivalent workspace/global definition through approved `actions_configure` calls, verify it, then remove the session entry to **promote it to a file layer** (the panel has no direct promotion control), going through normal git review and becoming a shared project capability. That is exactly the evolution path DSH Actions wants: agent-driven discovery → trial inside the session → human review → pinned down and shared.

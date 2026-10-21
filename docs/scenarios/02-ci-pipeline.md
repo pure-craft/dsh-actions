@@ -52,8 +52,8 @@
 - **触发构建**：面板表单填 job 名（或 Agent 带 `params` 调用），输出实时流出；
 - **查状态**：`append` 档让每次查询接在上次下方，形成一条状态时间线；
 - **参数化发布**：`select` 下拉把环境收敛到合法取值，`approval: "always"` 保证点错不了——人触发弹确认框，Agent 触发先问你；
-- **本周都在验 staging**？把 `env=staging` 固定到本会话（表单勾选 / `actions_configure`），之后免逐次填写，会话结束自动消失；
-- **要一个"发布到 staging"的专用入口**？让 Agent 用 `actions_configure` + `extends: "global:ci-release"` + `params: { env: "staging" }` 注册会话级变体（注册必经你批准），用得好再提升到全局层。
+- **本周都在验 staging**？每次显式传 `env=staging`；没有会话级参数记忆。需要复用入口时创建下述会话变体；
+- **要一个"发布到 staging"的专用入口**？让 Agent 用 `actions_configure` + `extends: "global:ci-release"` + 派生 `inputs` 中 env 的 `default: "staging"` 注册会话级变体（注册必经你批准），用得好再提升到全局层。
 
 ## 边界
 

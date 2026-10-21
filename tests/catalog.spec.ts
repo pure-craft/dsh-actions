@@ -49,71 +49,22 @@ const WORKSPACE_FILE = JSON.stringify({
 });
 
 describe('loadActionsCatalog', () => {
-  it('merges both layers and normalizes to project action summaries', async () => {
+  it('loads both layers independently and normalizes each definition', async () => {
     const catalog = await loadActionsCatalog('/repo/app', {
-      dshHome: '/dsh',
-      home: '/home/u',
-      env: { MODE: 'staging' },
-      readFile: fakeReadFile({
-        '/dsh/actions.json': GLOBAL_FILE,
-        '/repo/app/.dsh/actions.json': WORKSPACE_FILE,
-      }),
+      dshHome: '/dsh', home: '/home/u', env: { MODE: 'staging' },
+      readFile: fakeReadFile({ '/dsh/actions.json': GLOBAL_FILE, '/repo/app/.dsh/actions.json': WORKSPACE_FILE }),
     });
-
     expect(catalog.apiVersion).toBe(1);
     expect(catalog.workspace).toBe('/repo/app');
     expect(catalog.runs).toEqual([]);
-
-    // Sources: both available; the broken global entry degrades on its source.
-    expect(catalog.sources).toHaveLength(2);
-    expect(catalog.sources[0]).toMatchObject({ layer: 'global', available: true });
+    expect(catalog.sources[0]).toMatchObject({ available: true });
     expect(catalog.sources[0]?.errors).toHaveLength(1);
-    expect(catalog.sources[1]).toMatchObject({ layer: 'workspace', available: true, errors: [] });
-
-    expect(catalog.actions.map((action) => action.id)).toEqual([
-      'workspace:build',
-      'global:lint',
-      'workspace:deploy',
-    ]);
-
-    // Merged entry: workspace identity + fields, inherited global fields, env key merge.
-    const build = catalog.actions[0];
-    expect(build).toMatchObject({
-      id: 'workspace:build',
-      label: 'build',
-      sourceLayer: 'workspace',
-      visibility: 'ui',
-      command: 'pnpm build --filter app',
-      cwd: '/repo/app/packages/web',
-      env: { A: '1', B: '20' },
-    });
-    expect(build?.detail).toBe('global build');
-    // Workspace entry's instanceLimit wins; policy inherited from the global entry.
-    expect(build?.runOptions).toEqual({ instanceLimit: 2, instancePolicy: 'reject' });
-
-    // Global-only entry: defaults applied.
-    expect(catalog.actions[1]).toEqual({
-      id: 'global:lint',
-      label: 'lint',
-      sourceLayer: 'global',
-      visibility: 'all',
-      approval: 'never',
-      command: 'make lint',
-      cwd: '/repo/app',
-      runOptions: { instanceLimit: 1, instancePolicy: 'reuse' },
-    });
-
-    // Workspace-only entry: variable substitution in command/cwd.
-    expect(catalog.actions[2]).toEqual({
-      id: 'workspace:deploy',
-      label: 'deploy',
-      sourceLayer: 'workspace',
-      visibility: 'agent',
-      approval: 'never',
-      command: 'deploy --home /home/u --mode staging',
-      cwd: '/repo/app/infra',
-      runOptions: { instanceLimit: 1, instancePolicy: 'reuse' },
-    });
+    expect(catalog.actions.map((action) => action.id)).toEqual(['global:build', 'global:lint', 'workspace:build', 'workspace:deploy']);
+    expect(catalog.actions[0]).toMatchObject({ command: 'make all', agentVisible: false, favorite: false, cwd: '/repo/app/packages/web', env: { A: '1', B: '2' } });
+    expect(catalog.actions[2]).toMatchObject({ command: 'pnpm build --filter app', agentVisible: true, favorite: false, cwd: '/repo/app', env: { B: '20' }, runOptions: { instanceLimit: 2, instancePolicy: 'reuse' } });
+    expect(catalog.actions[2]?.detail).toBeUndefined();
+    expect(catalog.actions[3]).toMatchObject({ command: 'deploy --home /home/u --mode staging', cwd: '/repo/app/infra', agentVisible: true });
+    expect(catalog.actions.every((action) => !('visibility' in action))).toBe(true);
   });
 
   it('degrades missing files without blocking the other layer', async () => {
@@ -223,7 +174,7 @@ describe('normalizeActionEntry', () => {
 });
 
 describe('loadActionsCatalog inputs (2.4)', () => {
-  it('merges inputs across layers and surfaces them on the summary', async () => {
+  it('merges inputs only with an explicit extends reference', async () => {
     const catalog = await loadActionsCatalog('/repo/app', {
       dshHome: '/dsh',
       readFile: fakeReadFile({
@@ -246,6 +197,7 @@ describe('loadActionsCatalog inputs (2.4)', () => {
             {
               label: 'deploy',
               command: 'deploy ${input:env} --fast',
+              extends: 'global:deploy',
               inputs: [{ id: 'env', type: 'select', options: ['staging', 'prod'], default: 'prod' }],
             },
           ],
@@ -253,8 +205,8 @@ describe('loadActionsCatalog inputs (2.4)', () => {
       }),
     });
     expect(catalog.sources.every((source) => source.available)).toBe(true);
-    expect(catalog.actions).toHaveLength(1);
-    const deploy = catalog.actions[0];
+    expect(catalog.actions).toHaveLength(2);
+    const deploy = catalog.actions[1];
     expect(deploy).toMatchObject({
       id: 'workspace:deploy',
       command: 'deploy ${input:env} --fast',
@@ -285,7 +237,7 @@ describe('session layer (T47)', () => {
     actions: [{ label: 'build', command: 'session build' }, { label: 'scratch', command: 'scratch pad' }],
   });
 
-  it('session layer wins over workspace and global; session-only entries appear', async () => {
+  it('session layer coexists with workspace and global in file order', async () => {
     const sessionPath = sessionActionsPath('/dsh', '/repo/app', 'sess-1');
     const catalog = await loadActionsCatalog('/repo/app', {
       dshHome: '/dsh',
@@ -296,12 +248,12 @@ describe('session layer (T47)', () => {
         [sessionPath]: SESSION_FILE,
       }),
     });
-    const build = catalog.actions.find((action) => action.label === 'build');
+    const build = catalog.actions.find((action) => action.id === 'session:build');
     expect(build?.command).toBe('session build');
     expect(build?.sourceLayer).toBe('session');
     expect(build?.id).toBe('session:build');
-    // Field-wise inheritance through two overrides: detail survives from global.
-    expect(build?.detail).toBe('global detail');
+    expect(build?.detail).toBeUndefined();
+    expect(catalog.actions.map((action) => action.id)).toEqual(['global:build', 'workspace:build', 'workspace:test', 'session:build', 'session:scratch']);
     expect(catalog.actions.find((action) => action.label === 'test')?.sourceLayer).toBe('workspace');
     expect(catalog.actions.find((action) => action.label === 'scratch')?.sourceLayer).toBe('session');
     expect(catalog.sources.map((source) => source.layer)).toEqual(['global', 'workspace', 'session']);
@@ -435,7 +387,7 @@ describe('session layer (T47)', () => {
     expect(derived?.extends).toBeUndefined();
     expect(derived?.command).toBe('echo derived');
     // Inherited nothing from the workspace shadow; the raw global base supplied the command.
-    const base = catalog.actions.find((action) => action.label === 'build');
+    const base = catalog.actions.find((action) => action.id === 'workspace:build');
     expect(base?.command).toBe('echo workspace-build'); // the shadow still wins the merged view
   });
 
@@ -449,5 +401,54 @@ describe('session layer (T47)', () => {
     expect(byLayer.get('workspace')?.exists).toBe(true);
     expect(byLayer.get('global')?.exists).toBe(false);
     expect(byLayer.get('session')).toMatchObject({ available: true, exists: false });
+  });
+});
+
+
+describe('catalog conflicts and local UI metadata', () => {
+  it('cannot extend a conflicting entry, even if a different layer has the same label', async () => {
+    const catalog = await loadActionsCatalog('/repo/app', {
+      dshHome: '/dsh', readFile: fakeReadFile({
+        '/dsh/actions.json': JSON.stringify({ version: '1.0.0', actions: [{ label: 'base', command: 'global' }] }),
+        '/repo/app/.dsh/actions.json': JSON.stringify({ version: '1.0.0', actions: [
+          { label: 'base', command: 'one' }, { label: 'safe', command: 'ok' },
+          { label: 'base', command: 'two' }, { label: 'child', extends: 'workspace:base' },
+        ] }),
+      }),
+    });
+    expect(catalog.actions.map((action) => action.id)).toEqual(['global:base', 'workspace:safe', 'workspace:child']);
+    expect(catalog.sources[1]?.errors).toHaveLength(2);
+    expect(catalog.actions[2]?.extends).toBe('workspace:base');
+    expect(catalog.actions[2]?.command).not.toBe('global');
+  });
+
+  it('excludes duplicate folder entries and prevents extends from selecting a conflict', async () => {
+    const catalog = await loadActionsCatalog('/repo/app', {
+      dshHome: '/dsh', sessionId: 's', readFile: fakeReadFile({
+        [sessionActionsPath('/dsh', '/repo/app', 's')]: JSON.stringify({ version: '1.0.0', folders: ['child'], actions: [{ label: 'derived', extends: 'folder:child:dup' }] }),
+        '/repo/app/child/.dsh/actions.json': JSON.stringify({ version: '1.0.0', actions: [
+          { label: 'dup', command: 'one' }, { label: 'ok', command: 'yes' }, { label: 'dup', command: 'two' },
+        ] }),
+      }),
+    });
+    expect(catalog.actions.map((action) => action.id)).toEqual(['session:derived', 'folder:child:ok']);
+    expect(catalog.actions[0]?.extends).toBe('folder:child:dup');
+    expect(catalog.sources.find((source) => source.layer === 'folder')?.errors).toHaveLength(2);
+  });
+
+  it('resolves chained inheritance without inheriting favorites and honors explicit false', async () => {
+    const catalog = await loadActionsCatalog('/repo/app', {
+      dshHome: '/dsh', readFile: fakeReadFile({
+        '/repo/app/.dsh/actions.json': JSON.stringify({ version: '1.0.0', actions: [
+          { label: 'grandchild', extends: 'workspace:child' },
+          { label: 'child', extends: 'workspace:base', favorite: true },
+          { label: 'base', command: 'x', favorite: true, agentVisible: false },
+          { label: 'public', extends: 'workspace:base', favorite: false, agentVisible: true },
+        ] }),
+      }),
+    });
+    expect(catalog.actions.map((action) => action.favorite)).toEqual([false, true, true, false]);
+    expect(catalog.actions.map((action) => action.agentVisible)).toEqual([false, false, false, true]);
+    expect(catalog.actions.map((action) => action.command)).toEqual(['x', 'x', 'x', 'x']);
   });
 });

@@ -62,9 +62,9 @@ export interface ActionsTriggerSourceLike {
 
 export const ACTIONS_REFERENCE_SOURCE = 'actions';
 
-/** The inline token inserted by the list row's send button: namespaced `@actions:<label>` — identical to the chip the '/' menu inserts (the host renders chips as @ + label). */
-export function buildActionToken(label: string): string {
-  return `@actions:${label} `;
+/** Plain-text row reference; source-qualified id disambiguates same-label Actions. */
+export function buildActionToken(actionId: string): string {
+  return `@actions:${actionId} `;
 }
 
 /**
@@ -120,7 +120,7 @@ export function serializeActionRef(
   if (optional.length > 0) parts.push(`可选：${optional.map((input) => input.id).join('、')}`);
   // A manual-only action cannot be run by the agent at all — say so explicitly
   // instead of letting it attempt actions_run on something it cannot see.
-  const note = action.visibility === 'ui'
+  const note = !action.agentVisible
     ? '。注意：仅人工可见，你无法运行它，请用户在面板上手动运行'
     : '';
   const brief = parts.length === 0 ? '' : `。${parts.join('；')}`;

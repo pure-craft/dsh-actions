@@ -74,9 +74,7 @@ describe('session Action folders — loading', () => {
       [folderActionsPath('/repo/frontend')]: actionsFile({
         actions: [
           { label: 'build', command: 'vite build' },
-          // Within one file the last definition of a label wins, exactly like
-          // every other layer — duplicate labels must not produce duplicate ids.
-          { label: 'build', command: 'vite build --mode prod' },
+
           { label: 'test', command: 'vitest run' },
         ],
       }),
@@ -111,7 +109,7 @@ describe('session Action folders — loading', () => {
       label: 'build',
       sourceLayer: 'folder',
       folder: '/repo/frontend',
-      command: 'vite build --mode prod',
+      command: 'vite build',
       cwd: '/repo/frontend',
     });
     // A folder outside the workspace is still addressable; its key is the
@@ -442,7 +440,7 @@ describe('session Action folders — client surface', () => {
     const namer = makeSectionNamer(t, () => '/repo');
     const base = {
       label: 'build',
-      visibility: 'all' as const,
+      agentVisible: true,
       approval: 'never' as const,
       command: 'true',
       cwd: '/repo',

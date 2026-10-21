@@ -303,7 +303,8 @@ class FakeApi implements ActionsApi {
       id: actionId,
       label: actionId,
       sourceLayer: 'workspace',
-      visibility: 'all',
+      agentVisible: true,
+  visibility: 'all',
       approval: 'never',
       command: `echo ${actionId}`,
       cwd: workspace,
@@ -344,6 +345,10 @@ class FakeApi implements ActionsApi {
       ? catalog
       : { ...catalog, actions: catalog.actions.filter((action) => !this.deletedActions.has(`${sessionId}:${action.id}`)) };
     return visible;
+  }
+
+  updatePresentation(request: import('../src/client/api.js').PresentationUpdate): Promise<ActionsCatalog> {
+    return Promise.resolve(this.catalogFor(request.sessionId));
   }
 
   deleteAction(sessionId: string, actionId: string): Promise<void> {
@@ -1537,7 +1542,8 @@ describe('composer @ reference source (T53)', () => {
     id,
     label,
     sourceLayer: layer,
-    visibility: 'all',
+    agentVisible: true,
+  visibility: 'all',
     approval: 'never',
     command: `run ${label}`,
     cwd: '/ws/a',
@@ -1595,7 +1601,7 @@ describe('composer @ reference source (T53)', () => {
   });
 
   it('warns the agent when the referenced action is manual-only', () => {
-    const actions = [action('workspace:deploy', 'deploy', 'workspace', { visibility: 'ui' })];
+    const actions = [action('workspace:deploy', 'deploy', 'workspace', { agentVisible: false })];
 
     const text = serializeActionRef(actions, 'workspace:deploy');
     expect(text).toContain('仅人工可见');
@@ -1619,7 +1625,8 @@ describe('action row badges (T54)', () => {
     id: 'workspace:build',
     label: 'build',
     sourceLayer: 'workspace',
-    visibility: 'all',
+    agentVisible: true,
+  visibility: 'all',
     approval: 'never',
     command: 'pnpm build',
     cwd: '/ws/a',
@@ -1646,7 +1653,7 @@ describe('action row badges (T54)', () => {
     expect(buildActionBadges({ ...base, presentation: { panel: 'append' } }, fakeT)
       .map((badge) => badge.key)).toEqual(['panel-append']);
     expect(buildActionBadges({ ...base, presentation: { panel: 'new' } }, fakeT)).toEqual([]);
-    expect(buildActionBadges({ ...base, visibility: 'ui' }, fakeT).map((badge) => badge.key))
+    expect(buildActionBadges({ ...base, agentVisible: false }, fakeT).map((badge) => badge.key))
       .toEqual(['visibility-ui']);
   });
 
@@ -1663,7 +1670,7 @@ describe('action row badges (T54)', () => {
       ...base,
       approval: 'always',
       presentation: { panel: 'dedicated' },
-      visibility: 'ui',
+      agentVisible: false,
       extends: 'workspace:base',
     }, fakeT);
     expect(badges.map((badge) => badge.key)).toEqual([

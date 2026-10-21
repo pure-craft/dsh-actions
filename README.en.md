@@ -158,7 +158,7 @@ More complete examples (`runOptions`, `inputs`, `approval`) are in the [configur
 
 ## Three layers
 
-Where an action sits determines **who can see it and how long it lives** — the most distinctive part of the design. The three layers merge field by field with priority `global < workspace < session`; on a name collision the higher layer wins:
+Where an action sits determines **who can see it and how long it lives** — the most distinctive part of the design. The three layers are independent: same-label Actions coexist with source-qualified ids, without implicit merging:
 
 | Layer | Location | Who sees it | Lifetime | Typical use |
 |---|---|---|---|---|
@@ -166,16 +166,18 @@ Where an action sits determines **who can see it and how long it lives** — the
 | **Workspace** | `<workspace>/.dsh/actions.json` | everyone in the workspace, and agents | follows the directory/repository | the project's build/test/deploy — a new colleague clones and has them all |
 | **Session** | the session's own directory | this session only | archived when the session ends | temporary tasks, plus the repositories this session actually uses under an aggregate directory |
 
-The three layers are not three parallel configs — they are a **growth path for a task**:
+The three layers are parallel configuration sources, and can also form a **growth path for a task**:
 
 ```text
 session layer (agent pins it down)  ──promote──▶  workspace layer (team-shared)  ──distil──▶  global layer (personal, general)
      discarded with the session        follows the repo                    reused across projects
 ```
 
-- **Merge, not isolation**: a workspace can change a single field of a global task of the same name (override `command` to add an argument, or add a `detail`) and inherit the rest.
+- **Independent, not overriding**: `global:build`, `workspace:build`, and `session:build` coexist. Reuse requires explicit `extends`. All occurrences of a duplicate `label` within one file are excluded and reported as errors.
 - **The session layer is written by the agent**: `actions_configure` always requires your approval; the ones you like, you promote to a file layer and they become long-term assets.
 - **One panel for people**: all three layers appear in the same list, grouped; they run identically — the layer is metadata, not a barrier.
+
+`agentVisible` defaults to `true`; `false` keeps the Action in the panel but excludes Agent discovery and execution. Legacy `visibility` is accepted with migration warnings (`ui` maps to false, `all`/`agent` to true); explicit `agentVisible` wins. `favorite` is UI-only, defaults to false and never inherits through `extends`. Normal Agent projections omit `favorite` and `icon`.
 
 ### One workspace containing multiple repositories
 
@@ -253,7 +255,7 @@ Every doc is bilingual: Chinese is the `.md`, English is the matching `.en.md` i
 
 The field design, per-entry tolerance, and instance-reuse semantics of `actions.json` take after [VS Code Tasks](https://code.visualstudio.com/docs/editor/tasks) (tasks.json v2), reduced to a subset; the Action / Run product vocabulary — execution status, logs, run history, controlled automation — takes after [GitHub Actions](https://docs.github.com/en/actions).
 
-Three-layer merging and the session layer exist in neither: that part was added so one definition can be **both clicked by a person and called by an agent**. For the full field set and the deliberate differences from those projects, see the [configuration reference](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/configuration.en.md).
+Independent sources and the session layer exist in neither: that part was added so one definition can be **both clicked by a person and called by an agent**. For the full field set and the deliberate differences from those projects, see the [configuration reference](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/configuration.en.md).
 
 ## License
 

@@ -9,7 +9,7 @@ import {
 
 function action(overrides: Partial<ProjectActionSummary> = {}): ProjectActionSummary {
   return {
-    id: 'workspace:test', label: 'test', sourceLayer: 'workspace', visibility: 'all', approval: 'never',
+    id: 'workspace:test', label: 'test', sourceLayer: 'workspace', agentVisible: true, approval: 'never',
     command: 'pnpm test', cwd: '/ws', runOptions: { instanceLimit: 1, instancePolicy: 'reuse' }, ...overrides,
   };
 }
@@ -27,7 +27,7 @@ describe('available Actions runtime context', () => {
   });
 
   it('excludes ui-only actions and stays quiet when none are callable', () => {
-    expect(renderAvailableActionsContext([action({ visibility: 'ui' })])).toBe('');
+    expect(renderAvailableActionsContext([action({ agentVisible: false })])).toBe('');
     expect(renderAvailableActionsContext([])).toBe('');
   });
 

@@ -8,6 +8,7 @@ import {
   Button,
   Checkbox,
   IconCheckOutlineRegular,
+  IconChevronsUpDownOutlineRegular,
   IconChevronDownOutlineRegular,
   IconChevronUpOutlineRegular,
   IconEditOutlineRegular,
@@ -264,6 +265,17 @@ interface RowProps {
   selected: boolean;
   t: Translate;
   store: PanelStore;
+  handle: React.ReactNode;
+  rowRef: (node: HTMLDivElement | null) => void;
+  onDragStart: (event: React.DragEvent<HTMLDivElement>) => void;
+  onDragEnd: () => void;
+  onDragOver: (event: React.DragEvent) => void;
+  onDrop: (event: React.DragEvent) => void;
+  onClickCapture: (event: React.MouseEvent) => void;
+  onPointerDownCapture: (event: React.PointerEvent) => void;
+  dragging: boolean;
+  dropTarget: boolean;
+  presentationEnabled: boolean;
   onSelect: () => void;
   onRun: () => void;
   onCancel: (runId: string) => void;
@@ -282,7 +294,23 @@ function ActionRow(props: RowProps): React.ReactElement {
   // T54: only active runs need a status signal; idle rows start directly with
   // the Action icon instead of reserving space for a meaningless grey dot.
   const badges = buildActionBadges(action, t);
-  return h('div', { className: 'dsh-actions-row', 'data-selected': selected ? 'true' : 'false' },
+  return h('div', { ref: props.rowRef, className: 'dsh-actions-row', draggable: props.presentationEnabled, 'data-selected': selected ? 'true' : 'false', 'data-dragging': props.dragging, 'data-drop-target': props.dropTarget, onDragStart: props.onDragStart, onDragEnd: props.onDragEnd, onDragOver: props.onDragOver, onDrop: props.onDrop, onClickCapture: props.onClickCapture, onPointerDownCapture: props.onPointerDownCapture },
+    props.handle,
+    // Approved text-glyph fallback, like the @ action below: no star primitive
+    // is available. Keep both states resident, independent of row selection.
+    h('button', {
+      type: 'button',
+      className: 'dsh-actions-favorite',
+      'data-active': action.favorite === true,
+      'aria-pressed': action.favorite === true,
+      'aria-label': `${action.label}: ${t(action.favorite === true ? 'unfavorite' : 'favorite')}`,
+      title: t(action.favorite === true ? 'unfavorite' : 'favorite'),
+      disabled: !props.presentationEnabled,
+      onClick: (event: React.MouseEvent) => {
+        event.stopPropagation();
+        void props.store.setFavorite(action.id, action.favorite !== true);
+      },
+    }, h('span', { 'aria-hidden': true }, action.favorite === true ? '★' : '☆')),
     // S6: the active dot is a real sibling button of the row's main button
     // (interactive content must not nest inside a <button>).
     activeLatest !== undefined
@@ -356,6 +384,7 @@ function ActionSection(props: {
   /** Compact quiet treatment used for empty session-selected directories. */
   compactEmpty?: boolean | undefined;
   actions: ProjectActionSummary[];
+  source?: ActionSourceStatus | undefined;
   state: PanelStore['state'];
   t: Translate;
   store: PanelStore;
@@ -374,6 +403,111 @@ function ActionSection(props: {
 }): React.ReactElement {
   const { state, store, t } = props;
   const configPath = props.configPath;
+  type DragState = { id: string; ids: string[]; keyboard: boolean; saving?: boolean };
+  const [drag, setDrag] = React.useState<DragState | null>(null);
+  const dragRef = React.useRef<DragState | null>(null);
+  const rows = React.useRef(new Map<string, HTMLDivElement>());
+  const previousRects = React.useRef(new Map<string, DOMRect>());
+  const animations = React.useRef(new Map<string, Animation>());
+  const suppressClick = React.useRef(false);
+  const pointerOrigin = React.useRef<Element | null>(null);
+  const operation = React.useRef(0);
+  const enabled = props.source?.revision !== undefined && !state.presentationPending;
+  const ordered = drag === null ? props.actions : drag.ids.flatMap((id) => props.actions.filter((item) => item.id === id));
+  const updateDrag = (next: DragState | null): void => { dragRef.current = next; setDrag(next); };
+  const cancelDrag = (): void => { operation.current += 1; updateDrag(null); };
+  const move = (ids: string[], id: string, target: number): string[] => {
+    const next = ids.filter((item) => item !== id);
+    next.splice(Math.max(0, Math.min(target, next.length)), 0, id);
+    return next;
+  };
+  const save = (): void => {
+    const current = dragRef.current;
+    const source = props.source;
+    if (current === null || current.saving || source === undefined) return;
+    if (!current.ids.some((id, index) => id !== props.actions[index]?.id)) { cancelDrag(); return; }
+    const labels = current.ids.map((id) => props.actions.find((item) => item.id === id)?.label ?? '');
+    const token = ++operation.current;
+    // Keep the preview while persistence runs; clearing first flashes the old order.
+    updateDrag({ ...current, saving: true });
+    void store.reorderActions(source.layer, source.folder, labels).then(() => {
+      if (token === operation.current) updateDrag(null);
+    });
+  };
+  const actionIds = JSON.stringify(props.actions.map((action) => action.id));
+  React.useEffect(() => {
+    operation.current += 1;
+    dragRef.current = null;
+    setDrag(null);
+  }, [actionIds, props.source?.revision]);
+  React.useEffect(() => {
+    const cancel = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape' && dragRef.current !== null && !dragRef.current.saving) {
+        event.preventDefault(); operation.current += 1; dragRef.current = null; setDrag(null);
+      }
+    };
+    window.addEventListener('keydown', cancel);
+    return () => { window.removeEventListener('keydown', cancel); operation.current += 1; };
+  }, []);
+  // FLIP: measure before cancelling existing animations so rapid reorders start
+  // from the current visual position rather than jumping to an old layout.
+  React.useLayoutEffect(() => {
+    const measured = new Map<string, DOMRect>();
+    for (const [id, node] of rows.current) measured.set(id, node.getBoundingClientRect());
+    const animating = new Set([...animations.current].filter(([, animation]) => animation.playState === 'running' || animation.pending).map(([id]) => id));
+    for (const animation of animations.current.values()) animation.cancel();
+    animations.current.clear();
+    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
+    const nextRects = new Map<string, DOMRect>();
+    for (const [id, node] of rows.current) {
+      const next = node.getBoundingClientRect();
+      nextRects.set(id, next);
+      const previous = previousRects.current.get(id);
+      const visual = measured.get(id);
+      const from = previous?.top;
+      if (!reducedMotion && from !== undefined && typeof node.animate === 'function') {
+        // Measured after reordering: recover the old visual position by
+        // applying the old layout origin to the still-running transform.
+        const delta = animating.has(id) ? from + ((visual?.top ?? next.top) - next.top) - next.top : from - next.top;
+        if (Math.abs(delta) > .5) {
+          const animation = node.animate([{ transform: `translateY(${delta}px)` }, { transform: 'translateY(0)' }], { duration: 180, easing: 'ease-out' });
+          animations.current.set(id, animation);
+        }
+      }
+    }
+    previousRects.current = nextRects;
+  }, [ordered.map((action) => action.id).join('\0')]);
+  React.useEffect(() => () => {
+    for (const animation of animations.current.values()) animation.cancel();
+    animations.current.clear();
+  }, []);
+  const dragOver = (event: React.DragEvent, targetId?: string): void => {
+    const current = dragRef.current;
+    if (current === null || current.keyboard || current.saving || !enabled) return;
+    event.preventDefault(); event.stopPropagation(); event.dataTransfer.dropEffect = 'move';
+    if (targetId === undefined) {
+      const last = current.ids.at(-1);
+      const rect = last === undefined ? undefined : rows.current.get(last)?.getBoundingClientRect();
+      if (rect !== undefined && event.clientY > rect.bottom && last !== current.id) updateDrag({ ...current, ids: move(current.ids, current.id, current.ids.length - 1) });
+      return;
+    }
+    if (targetId === current.id) return;
+    const from = current.ids.indexOf(current.id);
+    const target = current.ids.indexOf(targetId);
+    const node = rows.current.get(targetId);
+    if (from < 0 || target < 0 || node === undefined) return;
+    // Offset geometry ignores an in-flight FLIP transform: the same stationary
+    // pointer cannot bounce between the two rows as a neighbour animates past it.
+    const parent = node.offsetParent;
+    const parentTop = parent instanceof HTMLElement ? parent.getBoundingClientRect().top - parent.scrollTop : 0;
+    const center = parentTop + node.offsetTop + node.offsetHeight / 2;
+    if ((from < target && event.clientY < center + 3) || (from > target && event.clientY > center - 3)) return;
+    updateDrag({ ...current, ids: move(current.ids, current.id, target) });
+  };
+  const drop = (event: React.DragEvent): void => {
+    if (dragRef.current === null || dragRef.current.keyboard || !enabled) return;
+    event.preventDefault(); event.stopPropagation(); save();
+  };
   return h('section', { className: props.compactEmpty === true ? 'dsh-actions-section dsh-actions-section-empty-folder' : 'dsh-actions-section' },
     h('div', { className: 'dsh-actions-section-head' },
       h('span', { className: 'dsh-actions-section-title' },
@@ -404,8 +538,13 @@ function ActionSection(props: {
             }),
       ),
     ),
-    h('div', { className: 'dsh-actions-rows' },
-      ...props.actions.map((action) => {
+    ...(props.source?.warnings ?? []).map((warning, index) => h('div', {
+      key: `warning-${index}`, className: 'dsh-actions-source-warning', role: 'note',
+    }, h(IconWarningOutlineRegular, { size: 14 }), warning.includes('visibility') ? h('span', null, t('migrationWarning'), ' ', warning) : warning)),
+    h('div', { className: 'dsh-actions-sr-only', role: 'status', 'aria-live': 'polite' },
+      drag === null ? '' : t('reorderPosition', { label: props.actions.find((item) => item.id === drag.id)?.label ?? '', position: drag.ids.indexOf(drag.id) + 1 })),
+    h('div', { className: 'dsh-actions-rows', onDragOver: (event: React.DragEvent) => { dragOver(event); }, onDrop: drop },
+      ...ordered.map((action) => {
         const runs = (state.runIdsByAction[action.id] ?? [])
           .map((runId) => state.runs[runId])
           .filter((view): view is RunViewState => view !== undefined);
@@ -413,6 +552,47 @@ function ActionSection(props: {
           key: action.id,
           action,
           runs,
+          dragging: drag?.id === action.id && drag.saving !== true,
+          dropTarget: drag?.id === action.id && drag.saving === true,
+          presentationEnabled: enabled,
+          rowRef: (node: HTMLDivElement | null) => { if (node === null) rows.current.delete(action.id); else rows.current.set(action.id, node); },
+          onDragStart: (event: React.DragEvent<HTMLDivElement>) => {
+            const target = pointerOrigin.current ?? (event.target instanceof Element ? event.target : null);
+            const interactive = target?.closest('button, a, input, select, textarea, [role="button"]');
+            if (!enabled || (interactive !== null && interactive !== undefined && !interactive.matches('.dsh-actions-row-main, .dsh-actions-drag-handle'))) { event.preventDefault(); return; }
+            suppressClick.current = true;
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('text/plain', action.id);
+            const row = event.currentTarget;
+            const rect = row.getBoundingClientRect();
+            event.dataTransfer.setDragImage(row, event.clientX - rect.left, event.clientY - rect.top);
+            updateDrag({ id: action.id, ids: props.actions.map((item) => item.id), keyboard: false });
+          },
+          onDragEnd: () => { if (dragRef.current?.saving !== true) cancelDrag(); },
+          onPointerDownCapture: (event: React.PointerEvent) => { suppressClick.current = false; pointerOrigin.current = event.target instanceof Element ? event.target : null; },
+          onClickCapture: (event: React.MouseEvent) => {
+            if (suppressClick.current) { event.preventDefault(); event.stopPropagation(); suppressClick.current = false; }
+          },
+          handle: h('button', {
+            type: 'button', className: 'dsh-actions-drag-handle', disabled: !enabled,
+            'aria-label': `${action.label}: ${t('reorderHandle')}`,
+            'aria-pressed': drag?.id === action.id,
+            onKeyDown: (event: React.KeyboardEvent) => {
+              if (event.key === 'Escape') { event.preventDefault(); cancelDrag(); return; }
+              if (!enabled) return;
+              const current = dragRef.current;
+              if (event.key === ' ' || event.key === 'Enter') {
+                event.preventDefault();
+                if (current?.keyboard === true && current.id === action.id) save();
+                else updateDrag({ id: action.id, ids: props.actions.map((item) => item.id), keyboard: true });
+              } else if (current?.keyboard === true && current.id === action.id && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+                event.preventDefault();
+                updateDrag({ ...current, ids: move(current.ids, action.id, current.ids.indexOf(action.id) + (event.key === 'ArrowUp' ? -1 : 1)) });
+              }
+            },
+          }, h(IconChevronsUpDownOutlineRegular, { size: 14 })),
+          onDragOver: (event: React.DragEvent) => { dragOver(event, action.id); },
+          onDrop: drop,
           selected: state.selectedActionId === action.id,
           t,
           store,
@@ -1032,7 +1212,7 @@ export function ActionsPanel(deps: PanelDeps): React.ReactElement {
     : (action: ProjectActionSummary): void => {
         deps.inputActions?.setDraft(mergeCtaDraft(
           currentDraft,
-          buildActionToken(action.label),
+          buildActionToken(action.id),
         ));
         deps.activateChat?.();
       };
@@ -1066,6 +1246,10 @@ export function ActionsPanel(deps: PanelDeps): React.ReactElement {
           ? () => { writeFix(source); }
           : undefined,
       })),
+      ...state.presentationErrors.map((error) => h('div', { key: error.id, className: 'dsh-actions-action-error', role: 'alert' },
+        h('span', null, error.conflict ? t('presentationConflict') : t('presentationFailed', { message: error.message })),
+        error.conflict ? h(Button, { variant: 'ghost', size: 'sm', onClick: () => { void store.refresh(); } }, t('refresh')) : null,
+        h(Button, { variant: 'ghost', size: 'sm', onClick: () => { store.dismissPresentationError(error.id); } }, t('conflictDismiss')))),
       state.actionError ? h('div', { className: 'dsh-actions-action-error' }, t('actionFailed')) : null,
       state.conflict !== null ? h(ConflictBar, { conflict: state.conflict, store, t }) : null,
       state.declined !== null ? h(DeclinedBar, { declined: state.declined, store, t }) : null,
@@ -1101,6 +1285,7 @@ export function ActionsPanel(deps: PanelDeps): React.ReactElement {
         h(ActionSection, {
           title: t('sectionWorkspace'),
           actions: workspaceActions,
+          source: sourceByLayer.get('workspace'),
           state,
           t,
           store,
@@ -1117,6 +1302,7 @@ export function ActionsPanel(deps: PanelDeps): React.ReactElement {
         h(ActionSection, {
           title: t('sectionGlobal'),
           actions: globalActions,
+          source: sourceByLayer.get('global'),
           state,
           t,
           store,
@@ -1137,6 +1323,7 @@ export function ActionsPanel(deps: PanelDeps): React.ReactElement {
           icon: h(IconNewChatOutlineRegular, { size: 14 }),
           tip: t('sessionTip'),
           actions: sessionActions,
+          source: sessionSource,
           state,
           t,
           store,
@@ -1158,6 +1345,7 @@ export function ActionsPanel(deps: PanelDeps): React.ReactElement {
           tip: group.tip,
           compactEmpty: group.compactEmpty,
           actions: group.actions,
+          source: catalog.sources.find((source) => source.layer === 'folder' && source.folder === group.folder),
           state,
           t,
           store,

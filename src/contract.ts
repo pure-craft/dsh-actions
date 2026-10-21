@@ -22,8 +22,8 @@ export const ACTIONS_PLUGIN_ID = 'dsh-actions';
 /**
  * Where an action definition comes from.
  *
- * Merge priority: global < workspace < session (T47) — the session layer wins
- * every merge it joins.
+ * All sources are independent: same-label entries in different layers coexist.
+ * Inheritance happens only through an explicit `extends` reference.
  *
  * `folder` is the fourth, **non-merging** origin (T66): the definition lives
  * in a directory the session selected through its own top-level `folders`,
@@ -33,7 +33,7 @@ export const ACTIONS_PLUGIN_ID = 'dsh-actions';
  */
 export type ActionSourceLayer = 'global' | 'workspace' | 'session' | 'folder';
 
-/** Which entries expose the action. */
+/** @deprecated Use agentVisible. All actions are available in the UI. */
 export type ActionVisibility = 'all' | 'ui' | 'agent';
 
 /** Host conflict policy for overlapping run requests. */
@@ -107,6 +107,11 @@ export interface ActionEntryConfig {
   /** Optional only for extends entries (inherited at resolution); required otherwise. */
   command?: string;
   detail?: string;
+  /** Agent discovery/execution visibility; default true. */
+  agentVisible?: boolean;
+  /** UI-only favorite marker; default false, never inherited through extends. */
+  favorite?: boolean;
+  /** @deprecated Legacy input compatibility; prefer agentVisible. */
   visibility?: ActionVisibility;
   approval?: ActionApprovalRequirement;
   options?: ActionOptionsConfig;
@@ -148,12 +153,17 @@ export interface ActionsFileConfig {
 // ---------------------------------------------------------------------------
 
 export interface ProjectActionSummary {
-  /** Stable id: derived from source layer + label; merged entries use the workspace layer. */
+  /** Stable id: derived from source layer + label. */
   id: string;
   label: string;
   detail?: string;
   sourceLayer: ActionSourceLayer;
-  visibility: ActionVisibility;
+  /** Agent discovery/execution visibility; default true. */
+  agentVisible: boolean;
+  /** UI-only favorite marker; default false. */
+  favorite?: boolean;
+  /** @deprecated Transitional type compatibility only; not emitted by the Host. */
+  visibility?: ActionVisibility;
   /** Normalized approval requirement; `never` when the entry omitted it. */
   approval: ActionApprovalRequirement;
   /** Command text after variable substitution. */
@@ -168,7 +178,7 @@ export interface ProjectActionSummary {
   /** Present only when the config sets `presentation.panel`; absence means 'new'. */
   presentation?: ActionPresentationConfig;
   /**
-   * Declared parameters (after the two-layer merge). The summary keeps
+   * Declared parameters (after explicit inheritance). The summary keeps
    * `${input:id}` placeholders verbatim in command/cwd/env/detail; values are
    * resolved per run via `normalizeParams` + variable substitution.
    */
@@ -206,7 +216,7 @@ export type AgentActionView = Pick<
   | 'label'
   | 'sourceLayer'
   | 'folder'
-  | 'visibility'
+  | 'agentVisible'
   | 'approval'
   | 'command'
   | 'cwd'
@@ -235,8 +245,13 @@ export interface ActionSourceStatus {
    * `folder` sources, which is what tells several of them apart — they all
    * share `layer: 'folder'`.
    */
-  folder?: string;  /** Per-entry validation messages collected during loading. */
+  folder?: string;
+  /** Per-entry validation messages collected during loading. */
   errors: string[];
+  /** Non-fatal migration guidance. */
+  warnings?: string[];
+  /** SHA-256 of the exact source text, for optimistic write concurrency. */
+  revision?: string;
 }
 
 export interface ActionsCatalog {

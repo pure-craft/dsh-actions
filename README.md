@@ -156,7 +156,7 @@ Agent 侧一共 4 个工具：`actions_query` / `actions_run` / `actions_cancel`
 
 ## 三层设计
 
-同一个动作，放在哪一层决定了**谁能看到它、它活多久**——这是 DSH Actions 最有特色的设计。三层按优先级 `全局 < 工作区 < 会话` 逐字段合并，同名时上层胜出：
+同一个动作，放在哪一层决定了**谁能看到它、它活多久**——这是 DSH Actions 最有特色的设计。三层完全独立；跨层同名 Action 并存，以来源限定 id 区分，不隐式合并：
 
 | 层 | 位置 | 谁能看到 | 生命周期 | 典型用途 |
 |---|---|---|---|---|
@@ -164,16 +164,18 @@ Agent 侧一共 4 个工具：`actions_query` / `actions_run` / `actions_cancel`
 | **工作区** | `<workspace>/.dsh/actions.json` | 该工作区的所有人与 Agent | 随目录/仓库提交 | 项目的 build/test/部署——新同事 clone 即有全套 |
 | **会话** | 会话自己的目录 | 仅当前会话 | 会话结束即归档 | 临时任务；以及聚合目录下本会话实际涉及的仓库 |
 
-三层不是并列的三个配置，而是一条**任务的成长路径**：
+三层是并列的三个配置来源，也可以组成一条**任务的成长路径**：
 
 ```text
 会话层（Agent 随手固化）  ──提升──▶  工作区层（团队共享）  ──提炼──▶  全局层（个人通用）
    用完即弃                    随仓库走                     跨项目复用
 ```
 
-- **合并而非隔离**：工作区可以在全局的同名任务上只改一个字段（比如覆盖 `command` 加参数、或补一个 `detail`），其余字段继承；
+- **独立而非覆盖**：`global:build`、`workspace:build`、`session:build` 同时存在；复用定义必须显式写 `extends`。同一文件重复 `label` 的所有条目都排除并报错；
 - **会话层由 Agent 写入**：`actions_configure` 注册必经你的批准；你觉得好用的，一句话提升到文件层变成长期资产；
 - **人的同一面板**：三层任务在同一个列表里分区展示，运行方式完全一致——来源只是元信息，不是使用门槛。
+
+`agentVisible` 默认 `true`；`false` 保留面板显示但禁止 Agent 发现和执行。旧 `visibility` 兼容并产生迁移警告（`ui` 对应 false，`all`/`agent` 对应 true），显式 `agentVisible` 优先。`favorite` 是 UI-only 常用标记，默认 false，不随 `extends` 继承；Agent 常规投影不含 `favorite` 和 `icon`。
 
 ### 一个工作区包含多个仓库
 
@@ -249,7 +251,7 @@ Skills 和 MCP 已经为面向 Agent 的能力提供了很好的实现范式。A
 
 `actions.json` 的字段设计、逐条容错与实例复用语义，参考了 [VS Code Tasks](https://code.visualstudio.com/docs/editor/tasks)（tasks.json v2）并精简为子集；Action / Run 这套产品语言——执行状态、日志、运行历史、受控自动化——参考了 [GitHub Actions](https://docs.github.com/en/actions)。
 
-三层合并与会话层是两者都没有的：那一部分是为了让同一份定义**既能被人点击、又能被 Agent 调用**才加的。字段全集与本项目的有意差异见 [配置参考](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/configuration.md)。
+三层独立来源与会话层是两者都没有的：那一部分是为了让同一份定义**既能被人点击、又能被 Agent 调用**才加的。字段全集与本项目的有意差异见 [配置参考](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/configuration.md)。
 
 ## License
 

@@ -16,7 +16,7 @@ const ACTION: ProjectActionSummary = {
   label: 'build',
   detail: 'Build artifacts',
   sourceLayer: 'workspace',
-  visibility: 'all',
+  agentVisible: true,
   approval: 'never',
   command: 'pnpm build',
   cwd: '/repo',
@@ -118,9 +118,9 @@ describe('parseProjectActionSummary', () => {
     expect(parseProjectActionSummary(ACTION)).toEqual(ACTION);
   });
 
-  it('rejects invalid layers, visibility, and run options', () => {
+  it('rejects invalid layers, agentVisible, and run options', () => {
     expect(() => parseProjectActionSummary({ ...ACTION, sourceLayer: 'repo' })).toThrow('Invalid project action summary');
-    expect(() => parseProjectActionSummary({ ...ACTION, visibility: 'hidden' })).toThrow('Invalid project action summary');
+    expect(() => parseProjectActionSummary({ ...ACTION, agentVisible: 'hidden' })).toThrow('Invalid project action summary');
     expect(() =>
       parseProjectActionSummary({ ...ACTION, runOptions: { instanceLimit: 1, instancePolicy: 'terminate' } }),
     ).toThrow('Invalid project action summary');

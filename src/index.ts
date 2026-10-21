@@ -1,5 +1,6 @@
 import { ACTIONS_PLUGIN_ID } from './contract.js';
 import { loadActionsCatalog } from './host/catalog.js';
+import { updateActionPresentation } from './host/config/presentation-store.js';
 import { seedGlobalActionsExample } from './host/config/seed.js';
 import { createConfigWatcher } from './host/config/watch.js';
 import { createActionsApiRoutes } from './host/rpc/index.js';
@@ -216,6 +217,7 @@ export function apply(ctx: HostContext, internals: ApplyInternals = {}): void {
   const routes = createActionsApiRoutes({
     loadCatalog: catalog.loadCatalog,
     runs,
+    updatePresentation: updateActionPresentation,
     resolveSessionWorkspace,
     // A foreground user click is the VS Code Tasks-like local execution path.
     // This policy is attached by the Host route, never accepted from the Web

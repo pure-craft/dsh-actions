@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { parse as parseJsonc, printParseErrorCode } from 'jsonc-parser';
 import type { ParseError } from 'jsonc-parser';
 import { ACTIONS_FILE_VERSION } from '../../contract.js';
@@ -21,6 +22,7 @@ export interface ParsedActionsFile {
   entries: ActionEntryConfig[];
   folders?: string[];
   errors: string[];
+  warnings?: string[];
 }
 
 export type ParseActionsFileResult =
@@ -79,17 +81,38 @@ export function parseActionsFileText(text: string): ParseActionsFileResult {
     return { ok: false, reason: 'parse-error', errors: ['Invalid actions file: actions must be an array'] };
   }
   const entries: ActionEntryConfig[] = [];
+  const warnings: string[] = [];
+  // Count raw labels before validation: an invalid duplicate is still ambiguous.
+  const indicesByLabel = new Map<string, number[]>();
   value.actions.forEach((entry, index) => {
+    if (!isRecord(entry) || typeof entry.label !== 'string' || entry.label.length === 0) return;
+    const indices = indicesByLabel.get(entry.label) ?? [];
+    indices.push(index);
+    indicesByLabel.set(entry.label, indices);
+  });
+  value.actions.forEach((entry, index) => {
+    const indices = isRecord(entry) && typeof entry.label === 'string' ? indicesByLabel.get(entry.label) : undefined;
+    if (indices !== undefined && indices.length > 1) {
+      errors.push(`actions[${index}].label: duplicate label "${String((entry as Record<string, unknown>).label)}" conflicts with ${indices.map((i) => `actions[${i}]`).join(', ')}; all conflicting entries excluded`);
+      return;
+    }
     try {
       // Wire validator (zod schema, T63a) with the entry's real index — the
       // thrown message already carries the full `actions[i].<path>` location.
       parseActionEntryConfig(entry, index);
-      entries.push(entry as ActionEntryConfig);
+      const raw = entry as ActionEntryConfig;
+      const { visibility, ...normalized } = raw;
+      if (visibility !== undefined) {
+        warnings.push(`actions[${index}].visibility is deprecated; use agentVisible: ${String(raw.agentVisible ?? (visibility !== 'ui'))} instead. All Actions remain available in the UI${raw.agentVisible === undefined ? '.' : '; the explicit agentVisible value takes precedence.'}`);
+        if (raw.agentVisible === undefined) normalized.agentVisible = visibility !== 'ui';
+      }
+      entries.push(normalized);
     } catch (error) {
       errors.push(error instanceof Error ? error.message : String(error));
     }
   });
   result.entries = entries;
+  if (warnings.length > 0) result.warnings = warnings;
   return result;
 }
 
@@ -145,15 +168,16 @@ export async function loadConfigLayer(
       entries: [],
     };
   }
+  const revision = createHash('sha256').update(text).digest('hex');
   const parsed = parseActionsFileText(text);
   if (!parsed.ok) {
     return {
-      status: { ...tagged, available: false, reason: parsed.reason, exists: true, errors: parsed.errors },
+      status: { ...tagged, available: false, reason: parsed.reason, exists: true, revision, errors: parsed.errors },
       entries: [],
     };
   }
   const loaded: LoadedConfigLayer = {
-    status: { ...tagged, available: true, exists: true, errors: parsed.errors },
+    status: { ...tagged, available: true, exists: true, revision, errors: parsed.errors, ...(parsed.warnings === undefined ? {} : { warnings: parsed.warnings }) },
     entries: parsed.entries,
   };
   if (parsed.folders === undefined) return loaded;

@@ -12,7 +12,7 @@ Read this when your task is writing or editing action definitions. For running a
 - [Parameters (`inputs`)](#parameters-inputs)
 - [Approval requirement (`approval`)](#approval-requirement-approval)
 - [Inheritance (`extends`)](#inheritance-extends)
-- [Merge semantics across layers](#merge-semantics-across-layers)
+- [Independent sources across layers](#independent-sources-across-layers)
 - [Choosing the layer](#choosing-the-layer)
 - [Verify before you finalize](#verify-before-you-finalize)
 - [Write complex commands as scripts](#write-complex-commands-as-scripts)
@@ -21,7 +21,7 @@ Read this when your task is writing or editing action definitions. For running a
 
 ## Where definitions live
 
-Three layers (merge priority ascending), all **JSONC** (comments and trailing commas allowed, like VS Code tasks.json):
+Three independent layers, all **JSONC** (comments and trailing commas allowed, like VS Code tasks.json):
 
 - `~/.dsh/actions.json` — global layer (`DSH_HOME` overrides the root). Personal, applies to every workspace.
 - `<workspace>/.dsh/actions.json` — workspace layer. Shared with everyone who opens this repository; the right default for project tasks.
@@ -102,10 +102,12 @@ To change the selection, edit the session-layer file; host plugins can also call
 
 | Field | Required | Meaning |
 | --- | --- | --- |
-| `label` | yes | Display name; also the merge key across layers and the basis of the stable id (`<layer>:<label>`). |
+| `label` | yes | Display name; unique within its source file and the basis of the stable id (`<layer>:<label>`). |
 | `command` | yes | Shell command, executed via `shell -c` under the workspace sandbox boundary. May reference `${input:id}` for declared parameters. |
 | `detail` | no | One-line description shown in the panel and in `actions_query` catalog results. Always write one — it is what an agent reads when deciding whether this action fits its goal. |
-| `visibility` | no | `all` (default) exposes to panel + agent tools; `ui` panel-only; `agent` tools-only. |
+| `agentVisible` | no | Boolean, default true; false excludes Agent discovery/execution but never hides the Action from the panel. |
+| `favorite` | no | UI-only favorite flag, default false; never inherited through `extends`. Normal Agent projections omit it and `icon`. |
+| `visibility` | no | Deprecated compatibility: `ui` maps to false, `all`/`agent` to true; explicit `agentVisible` wins. Load emits migration warnings. |
 | `approval` | no | `never` (default) / `agent` / `always` — see [Approval requirement](#approval-requirement-approval). |
 | `options.cwd` | no | Working directory, relative to the workspace root (default: workspace root). |
 | `options.env` | no | Extra environment variables for the run. |
@@ -118,7 +120,7 @@ To change the selection, edit the session-layer file; host plugins can also call
 
 ### Choosing icons
 
-For Actions shown in the panel (`visibility: "all"` or `"ui"`), prefer a simple semantic icon. Keep icons consistent across Actions with the same purpose, and use `lucide:` unless the project already has a coherent Iconify collection. Useful defaults:
+For Actions shown in the panel (all Actions), prefer a simple semantic icon. Keep icons consistent across Actions with the same purpose, and use `lucide:` unless the project already has a coherent Iconify collection. Useful defaults:
 
 | Purpose | Recommended icon |
 | --- | --- |
@@ -129,7 +131,7 @@ For Actions shown in the panel (`visibility: "all"` or `"ui"`), prefer a simple 
 | Lint / format | `lucide:paintbrush` |
 | Deploy / publish | `lucide:upload` |
 
-An icon supplements the text; it never replaces a short stable `label` or an informative `detail`. Do not spend time adding one to `visibility: "agent"` Actions because agent-facing surfaces do not receive the field.
+An icon supplements the text; it never replaces a short stable `label` or an informative `detail`. Agent-facing surfaces do not receive the field; it never controls visibility.
 
 ## Variable substitution (minimal set)
 
@@ -173,21 +175,22 @@ An entry may carry `extends: "<layer>:<label>"` to inherit another action's defi
 
 Resolution rules worth knowing:
 
-- References resolve against the **raw per-layer entries, before merging** — an entry shadowed by a higher layer is still referenceable by its own layer id. `extends: "global:build"` means the global file's own `build`, even when the workspace layer overrides `build`.
+- References resolve against **source-qualified raw entries**: `extends: "global:build"` always means the global file's own definition. Same-label entries in other sources are independent.
+- Explicit inheritance merges `options.env` by key and `inputs` by id; the derived entry wins for fields it writes. `favorite` is the exception: it never inherits, so the derived entry must set its own flag.
 - Chains (`a` extends `b` extends `c`) resolve regardless of declaration order.
 - An unresolvable or cyclic reference is not silently dropped: the entry keeps its `extends` marker and running it fails with `unknown-extends` naming the missing reference — fix by defining or correcting the target.
 
-## Merge semantics across layers
+## Independent sources across layers
 
-Same `label` in several layers merges **field by field** (VS Code assign semantics), with priority global < workspace < session: fields a higher layer writes override the lower entry; unwritten fields are inherited. `options.env` merges per key; `options.cwd`, `runOptions.*`, `presentation.panel`, and `approval` override field-wise; `inputs` merge **by `id`** (matched inputs merge field-wise, higher-layer-only inputs append). The merged action takes the winning layer's identity (`id = <layer>:<label>`). Within one file, a later duplicate label wins.
+Same `label` in several layers produces independent Actions (`global:build`, `workspace:build`, `session:build`). There is no automatic precedence, override, or field inheritance. Reuse requires explicit `extends`. Within one file, **every occurrence** of a duplicate label is excluded with source errors, while other labels still load. Configuration inspection/writes reject ambiguous duplicate-label files with `invalid-file`, never silently selecting one occurrence.
 
 Fault tolerance is per entry: an entry missing `label`/`command` (and not inheriting `command` via `extends`) or carrying an invalid field value is skipped with a source-level error message; the rest of the file still loads. Validation errors are field-precise — the source banner's error details carry strings of the form `actions[<index>].<path>: <message>` (e.g. `actions[0].inputs[0].options: …`), so locate and fix exactly what is named. After editing, check the panel's source banner (or `actions_query`) for degradation errors.
 
 ## Choosing the layer
 
 - **Workspace** (`.dsh/actions.json`): anything the project shares — build/check/dev/test commands, codegen, local CI. Commit it with the repo.
-- **Global** (`~/.dsh/actions.json`): personal conveniences that should exist in every workspace. Use it sparingly; a workspace entry with the same label overrides it field by field.
-- **Session**: use `actions_configure` with the explicit session layer for session-only actions (see [operating.md](operating.md)); the panel can promote a proven session entry into a file layer.
+- **Global** (`~/.dsh/actions.json`): personal conveniences that should exist in every workspace. Use it sparingly; a workspace entry with the same label is independent.
+- **Session**: use `actions_configure` with the explicit session layer for session-only actions (see [operating.md](operating.md)); when it proves useful, ask the Agent to create an equivalent definition in the workspace or global layer. The panel has no promotion control.
 
 ## Verify before you finalize
 
@@ -227,7 +230,7 @@ Why: JSON string + shell quoting is a double-escaping trap that produces command
 ## Authoring workflow
 
 1. Edit (or create) the appropriate layer's `actions.json`. In the panel, each layer header's edit button opens the exact file in DSH's file viewer.
-2. Keep `label` short and stable — it is the merge key and the stable-id basis. Put the explanation in `detail`.
-3. For commonly used panel-visible Actions, add a semantic Iconify `icon` (prefer `lucide:` and reuse the same icon for the same purpose). Skip it for agent-only entries.
+2. Keep `label` short and stable — it is unique within the file and the stable-id basis. Put the explanation in `detail`.
+3. For commonly used panel-visible Actions, add a semantic Iconify `icon` (prefer `lucide:` and reuse the same icon for the same purpose). It remains UI-only.
 4. Set `runOptions.instancePolicy: "reject"` for actions that must never overlap (watchers, migrators, anything stateful); set `approval` for destructive ones.
-5. Verify: `actions_query` shows the new/changed entry (respecting `visibility`), or the panel updates automatically — saving a configuration file takes effect without a manual refresh. If an entry is missing, check the source banner for a per-entry validation error.
+5. Verify: `actions_query` shows the new/changed entry (respecting `agentVisible`), or the panel updates automatically — saving a configuration file takes effect without a manual refresh. If an entry is missing, check the source banner for a per-entry validation error.

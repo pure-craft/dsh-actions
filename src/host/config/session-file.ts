@@ -15,6 +15,7 @@ import { dirname } from 'node:path';
 import { parse as parseJsonc, printParseErrorCode } from 'jsonc-parser';
 import type { ParseError } from 'jsonc-parser';
 import { ACTIONS_FILE_VERSION } from '../../contract.js';
+import { withActionFileLock } from './action-store.js';
 import type { ActionEntryConfig } from '../../contract.js';
 
 export interface SessionFileIO {
@@ -91,6 +92,7 @@ export async function writeSessionActionEntry(
   entry: ActionEntryConfig,
   io: SessionFileIO = defaultIo,
 ): Promise<void> {
+  return withActionFileLock(path, async () => {
   const config = (await readActionsFile(path, io)) ?? { version: ACTIONS_FILE_VERSION, actions: [] };
   const actions = Array.isArray(config.actions) ? [...(config.actions as unknown[])] : [];
   const index = actions.findIndex((existing) => entryLabel(existing) === entry.label);
@@ -98,6 +100,7 @@ export async function writeSessionActionEntry(
   else actions.push(entry);
   config.actions = actions;
   await writeActionsFile(path, config, io);
+  });
 }
 
 /**
@@ -110,10 +113,12 @@ export async function writeSessionActionFolders(
   folders: readonly string[],
   io: SessionFileIO = defaultIo,
 ): Promise<void> {
+  return withActionFileLock(path, async () => {
   const config = (await readActionsFile(path, io)) ?? { version: ACTIONS_FILE_VERSION, actions: [] };
   config.folders = [...folders];
   if (!Array.isArray(config.actions)) config.actions = [];
   await writeActionsFile(path, config, io);
+  });
 }
 
 /**
@@ -126,6 +131,7 @@ export async function configureSessionActionsFile(
   configuration: { readonly folders: readonly string[]; readonly actions: readonly ActionEntryConfig[] },
   io: SessionFileIO = defaultIo,
 ): Promise<void> {
+  return withActionFileLock(path, async () => {
   const existing = await readActionsFile(path, io);
   await writeActionsFile(
     path,
@@ -136,6 +142,7 @@ export async function configureSessionActionsFile(
     },
     io,
   );
+  });
 }
 
 /** Reset the session configuration to an empty, valid layer in one write. */
@@ -153,6 +160,7 @@ export async function deleteActionEntryFromFile(
   label: string,
   io: SessionFileIO = defaultIo,
 ): Promise<boolean> {
+  return withActionFileLock(path, async () => {
   const config = await readActionsFile(path, io);
   if (config === undefined) return false;
   const actions = Array.isArray(config.actions) ? [...(config.actions as unknown[])] : [];
@@ -162,4 +170,5 @@ export async function deleteActionEntryFromFile(
   config.actions = actions;
   await writeActionsFile(path, config, io);
   return true;
+  });
 }

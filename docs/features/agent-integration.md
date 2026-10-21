@@ -6,7 +6,7 @@
 
 同一个 Action 以两种形态提供：面板上的一次点击（人），以及一组结构化工具（Agent）。两侧的语义完全一致——同一份目录、同一个冲突协议、同一条审批闸门。
 
-新会话启动时，插件会把当前可供 Agent 调用的 Action 摘要注入运行时上下文，包括稳定 id、label、detail、审批要求和输入提示，并同时说明四个工具各自负责什么。`visibility: ui` 不会进入这份上下文；完整命令和配置仍按需通过 `actions_query` 渐进披露，避免把整个目录塞进初始提示词。
+新会话启动时，插件会把当前可供 Agent 调用的 Action 摘要注入运行时上下文，包括稳定 id、label、detail、审批要求和输入提示，并同时说明四个工具各自负责什么。`agentVisible: false` 不会进入这份上下文；完整命令和配置仍按需通过 `actions_query` 渐进披露，避免把整个目录塞进初始提示词。
 
 ## Agent 工具
 
@@ -42,7 +42,7 @@
 
 ## 会话框集成
 
-- **引用**：会话框输入 `/` 从菜单选择任务（候选带 `actions:` 前缀），插入 `☰ actions:<label>` chip；面板行上的 @ 按钮插入同形引用令牌。发送时 chip 经 codec 展开为**操作简报**——「使用 Action「label」（id: …）。必填：…（select 选项）」——Agent 据此精确调用（命令全文可用 `actions_query` 后补）。仅面板可见（`visibility: ui`）的任务被引用时会明确告知 Agent 无法运行、应交还用户。
+- **引用**：会话框输入 `/` 从菜单选择任务（候选带 `actions:` 前缀），插入 `☰ actions:<label>` chip；面板行上的 @ 按钮插入同形引用令牌。发送时 chip 经 codec 展开为**操作简报**——「使用 Action「label」（id: …）。必填：…（select 选项）」——Agent 据此精确调用（命令全文可用 `actions_query` 后补）。仅面板可见（`agentVisible: false`）的任务被引用时会明确告知 Agent 无法运行、应交还用户。
 - **发送到对话**：任务行上的 @ 按钮向会话框插入同一引用令牌——"帮我把这次失败的输出继续处理"从复制粘贴变成一次点击。
 
 ## 随包编写指导
@@ -51,4 +51,6 @@
 
 ## 可见性与隔离
 
-Agent 只看到 `visibility: all | agent` 的任务；运行状态按会话隔离——Agent 只能看到、取消本会话的运行，跨会话访问一律 `run-not-found`。同一会话的人与 Agent 共享运行视图。
+Agent 只看到 `agentVisible: true`（默认） 的任务；运行状态按会话隔离——Agent 只能看到、取消本会话的运行，跨会话访问一律 `run-not-found`。同一会话的人与 Agent 共享运行视图。
+
+`view: "layers"` 只返回 Agent 可见的原始来源条目与 revision，不会藉同名条目泄露其他来源的隐藏定义。删除只作用于目标来源，不存在 fallback；旧 `acknowledgeFallback` 参数仅兼容忽略。常规 catalog/action/run 投影不含 UI-only `favorite`/`icon`；保留四工具，不增加常用管理工具。

@@ -75,6 +75,7 @@ export interface ActionsApiDeps {
    * it back atomically. Returns false when the entry is absent. Wired by the
    * composition to `deleteActionEntryFromFile` + the layer's path.
    */
+  updatePresentation?(path: string, change: import('../config/presentation-store.js').PresentationChange): Promise<void>;
   deleteActionEntry?(
     layer: ActionSourceLayer,
     label: string,
@@ -95,6 +96,7 @@ export const ACTIONS_API_PATHS = {
   events: `${API_PREFIX}/runs/events`,
   catalogEvents: `${API_PREFIX}/catalog/events`,
   deleteAction: `${API_PREFIX}/actions/delete`,
+  presentation: `${API_PREFIX}/actions/presentation`,
 } as const;
 
 function json(value: unknown, status = 200): Response {
@@ -388,18 +390,12 @@ async function assembleCatalog(
       deps.watchFolder?.(workspace, source.folder);
     }
   }
-  // The web entry mirrors the agent tools' audience filter:
-  // agent-only actions never leave the Host through this channel.
-  // Runs of removed actions stay visible; only agent-only ones are hidden.
-  const hidden = new Set(
-    catalog.actions.filter((action) => action.visibility === 'agent').map((action) => action.id),
-  );
-  catalog.actions = catalog.actions.filter((action) => !hidden.has(action.id));
+  // All Actions are always visible to the user; agentVisible only gates tools.
   // T15: only a resolvable caller session gets run state, and only its own —
   // a workspace-only request reads definitions with `runs: []`.
   catalog.runs =
     sessionLive && sessionId !== undefined
-      ? deps.runs.listRuns({ workspace, sessionId }).filter((run) => !hidden.has(run.actionId))
+      ? deps.runs.listRuns({ workspace, sessionId })
       : [];
   return catalog;
 }
@@ -524,7 +520,7 @@ export function createActionsApiRoutes(deps: ActionsApiDeps): ConnectionFetchRou
         try {
           const catalog = await deps.loadCatalog(scope.workspace, scope.sessionId);
           const action = catalog.actions.find(
-            (candidate) => candidate.id === actionId && candidate.visibility !== 'agent',
+            (candidate) => candidate.id === actionId,
           );
           if (action === undefined) return failure(404, 'action-not-found', `Unknown action: ${actionId}`);
           // T47: an extends reference that stayed unresolved at load errors at run.
@@ -663,6 +659,47 @@ export function createActionsApiRoutes(deps: ActionsApiDeps): ConnectionFetchRou
       },
     },
     {
+      path: ACTIONS_API_PATHS.presentation,
+      methods: ['POST'],
+      requestBody: 'buffered',
+      async fetch(request) {
+        const body = await readBody(request);
+        if (body instanceof Response) return body;
+        const scope = resolveSessionScope(deps, body);
+        if (scope instanceof Response) return scope;
+        const expectedRevision = requireString(body, 'expectedRevision');
+        if (expectedRevision instanceof Response) return expectedRevision;
+        const layer = body.sourceLayer;
+        if (!['global', 'workspace', 'session', 'folder'].includes(String(layer))) return failure(400, 'bad-request', 'Invalid sourceLayer');
+        const hasFavorite = typeof body.favorite === 'boolean';
+        const hasOrder = Array.isArray(body.labels) && body.labels.every((label) => typeof label === 'string');
+        if (hasFavorite === hasOrder || (body.favorite !== undefined && !hasFavorite) || (body.labels !== undefined && !hasOrder)) return failure(400, 'bad-request', 'Specify either favorite or labels');
+        if (!deps.updatePresentation) return failure(503, 'presentation-unavailable', 'Presentation changes are not wired');
+        try {
+          const catalog = await deps.loadCatalog(scope.workspace, scope.sessionId);
+          const source = catalog.sources.find((candidate) => candidate.layer === layer && (layer !== 'folder' || candidate.folder === body.folder));
+          if (!source?.exists || !source.available) return failure(404, 'source-not-found', 'Configuration source is not available');
+          if (source.revision !== expectedRevision) return failure(409, 'stale-revision', 'Configuration changed; refresh and try again.');
+          const change: import('../config/presentation-store.js').PresentationChange = { expectedRevision };
+          if (hasFavorite) {
+            const action = catalog.actions.find((candidate) => candidate.id === body.actionId && candidate.sourceLayer === layer && (layer !== 'folder' || candidate.folder === source.folder));
+            if (!action) return failure(404, 'action-not-found', 'Action is not in this source');
+            change.label = action.label;
+            change.favorite = body.favorite as boolean;
+          } else change.labels = body.labels as string[];
+          await deps.updatePresentation(source.path, change);
+          deps.notifyCatalogChanged?.(scope.workspace);
+          return json({ catalog: await assembleCatalog(deps, scope.workspace, scope.sessionId) });
+        } catch (error) {
+          if (error instanceof Error && 'code' in error) {
+            const code = String(error.code);
+            return failure(code === 'stale-revision' ? 409 : code === 'ENOENT' ? 404 : 400, code, error.message);
+          }
+          return failure(500, 'presentation-failed', error instanceof Error ? error.message : String(error));
+        }
+      },
+    },
+    {
       path: ACTIONS_API_PATHS.deleteAction,
       methods: ['POST'],
       requestBody: 'buffered',
@@ -694,7 +731,7 @@ export function createActionsApiRoutes(deps: ActionsApiDeps): ConnectionFetchRou
           // rules apply: agent-only actions answer 404 here too).
           const catalog = await deps.loadCatalog(scope.workspace, scope.sessionId);
           const action = catalog.actions.find(
-            (candidate) => candidate.id === actionId && candidate.visibility !== 'agent',
+            (candidate) => candidate.id === actionId,
           );
           if (action === undefined) return failure(404, 'action-not-found', `Unknown action: ${actionId}`);
           const removed = await deps.deleteActionEntry(layer, label, scope.workspace, scope.sessionId);

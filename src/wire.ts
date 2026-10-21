@@ -8,7 +8,6 @@ import type {
   ActionPanelMode,
   ActionRunStatus,
   ActionSourceLayer,
-  ActionVisibility,
   ActionsCatalog,
   ActionsFileConfig,
   ProjectActionSummary,
@@ -30,10 +29,6 @@ function isStringRecord(value: unknown): value is Record<string, string> {
 
 function isLayer(value: unknown): value is ActionSourceLayer {
   return value === 'global' || value === 'workspace' || value === 'session' || value === 'folder';
-}
-
-function isVisibility(value: unknown): value is ActionVisibility {
-  return value === 'all' || value === 'ui' || value === 'agent';
 }
 
 function isInstancePolicy(value: unknown): value is ActionInstancePolicy {
@@ -189,7 +184,8 @@ export function parseProjectActionSummary(value: unknown): ProjectActionSummary 
     typeof value.id !== 'string' ||
     typeof value.label !== 'string' ||
     !isLayer(value.sourceLayer) ||
-    !isVisibility(value.visibility) ||
+    typeof value.agentVisible !== 'boolean' ||
+    (value.favorite !== undefined && typeof value.favorite !== 'boolean') ||
     !isApprovalRequirement(value.approval) ||
     typeof value.command !== 'string' ||
     typeof value.cwd !== 'string' ||
@@ -223,6 +219,8 @@ export function parseActionSourceStatus(value: unknown): ActionSourceStatus {
       value.reason !== 'unsupported-version') ||
     (value.exists !== undefined && typeof value.exists !== 'boolean') ||
     !optionalString(value.folder) ||
+    !optionalString(value.revision) ||
+    (value.warnings !== undefined && (!Array.isArray(value.warnings) || !value.warnings.every((warning) => typeof warning === 'string'))) ||
     !Array.isArray(value.errors) ||
     !value.errors.every((entry) => typeof entry === 'string')
   ) {

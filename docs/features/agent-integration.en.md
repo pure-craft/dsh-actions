@@ -6,7 +6,7 @@
 
 One Action is offered in two forms: a click in the panel (for a person), and a set of structured tools (for an agent). The semantics on both sides are identical — the same catalog, the same conflict protocol, the same approval gate.
 
-When a new session starts, the plugin injects concise summaries of the Actions available to the agent into runtime context: stable id, label, detail, approval requirement, and input hints, together with the role of each of the four tools. `visibility: ui` Actions are excluded. Full commands and configuration remain progressively disclosed through `actions_query`, rather than bloating the initial prompt with the whole catalog.
+When a new session starts, the plugin injects concise summaries of the Actions available to the agent into runtime context: stable id, label, detail, approval requirement, and input hints, together with the role of each of the four tools. `agentVisible: false` Actions are excluded. Full commands and configuration remain progressively disclosed through `actions_query`, rather than bloating the initial prompt with the whole catalog.
 
 ## Agent tools
 
@@ -42,7 +42,7 @@ Retries reuse the original evaluated command, directory, Action environment over
 
 ## Composer integration
 
-- **Referencing**: typing `/` in the composer opens a menu to pick a task (candidates carry the `actions:` prefix), inserting a `☰ actions:<label>` chip; the @ button on a panel row inserts the same reference token. On send, the codec expands the chip into an **action brief** — "use Action `<label>` (id: …). Required: … (select options)" — which is what lets the agent call it precisely (the full command text is available afterwards via `actions_query`). Referencing a panel-only task (`visibility: ui`) explicitly tells the agent it cannot run it and should hand it back to the user.
+- **Referencing**: typing `/` in the composer opens a menu to pick a task (candidates carry the `actions:` prefix), inserting a `☰ actions:<label>` chip; the @ button on a panel row inserts the same reference token. On send, the codec expands the chip into an **action brief** — "use Action `<label>` (id: …). Required: … (select options)" — which is what lets the agent call it precisely (the full command text is available afterwards via `actions_query`). Referencing a panel-only task (`agentVisible: false`) explicitly tells the agent it cannot run it and should hand it back to the user.
 - **Sending into the conversation**: the @ button on a task row inserts that same reference token into the composer — "keep working on this failed output" goes from copy-paste to one click.
 
 ## Authoring guidance shipped with the package
@@ -51,4 +51,6 @@ The plugin bundles a `dsh-actions-authoring` skill (versioned with the package, 
 
 ## Visibility and isolation
 
-The agent only sees tasks with `visibility: all | agent`; run state is isolated per session — an agent can see and cancel only runs from its own session, and cross-session access is always `run-not-found`. Within one session, the person and the agent share the same view of runs.
+The agent only sees tasks with `agentVisible: true` (the default); run state is isolated per session — an agent can see and cancel only runs from its own session, and cross-session access is always `run-not-found`. Within one session, the person and the agent share the same view of runs.
+
+`view: "layers"` returns only agent-visible raw source entries and revisions; a visible same-label entry cannot reveal another source's hidden definition. Delete affects only its target source, with no fallback; legacy `acknowledgeFallback` is ignored. Normal catalog/action/run projections omit UI-only `favorite`/`icon`. The four tools remain unchanged; there is no favorite-management tool.

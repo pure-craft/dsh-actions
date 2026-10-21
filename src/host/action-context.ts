@@ -44,7 +44,7 @@ function inputHint(action: ProjectActionSummary): string {
 }
 
 export function renderAvailableActionsContext(actions: readonly ProjectActionSummary[]): string {
-  const visible = actions.filter((action) => action.visibility !== 'ui');
+  const visible = actions.filter((action) => action.agentVisible !== false);
   if (visible.length === 0) return '';
   const rows = visible.map((action) => {
     const detail = action.detail ? ` — ${action.detail}` : '';
