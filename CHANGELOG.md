@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.1 — 2026-10-22
+
+### Fixed
+
+- Constrain the Actions list to its sidebar pane and keep sections at natural height, avoiding nested page scrolling, compressed sections and excessive blank scroll space with large catalogs.
+- Float the run dock at the bottom of the pane. Expanding raises the output above the list; collapsing retains only the tab strip. Reserve the measured dock height plus breathing room so the final Action can scroll clear of the dock.
+- Restore standalone source-degradation banner styling by removing a stray header selector.
+
+### Verified
+
+- Typecheck, lint and 485 automated tests passed; Host and Client production bundles built successfully.
+- Local user acceptance covered the floating dock, expand/collapse interaction and long-list scrolling. Added layout tests are source-level contracts, not browser geometry tests.
+- No Action configuration schema or execution permission changes.
+
 ## 0.5.0 — 2026-10-21
 
 ### Added
