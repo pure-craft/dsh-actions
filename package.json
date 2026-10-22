@@ -1,6 +1,6 @@
 {
   "name": "dsh-actions",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Run workspace and global actions from the DeepSeek Harness Web UI and agent tools — one definition for both.",
   "license": "MIT",
   "type": "module",

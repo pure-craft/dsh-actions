@@ -815,6 +815,8 @@ function ParamForm(props: {
   );
   return h(Modal, {
     open: true,
+    className: 'dsh-actions-params-modal',
+    contentClassName: 'dsh-actions-params-content',
     onClose: () => { store.dismissParamForm(); },
     title: t('paramsModalTitle', { label: action.label }),
     closeLabel: t('confirmClose'),

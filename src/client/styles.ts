@@ -129,6 +129,14 @@ export const ACTIONS_CSS = `
 body.dsh-actions-run-confirmation-open [role='dialog'] { width: min(760px, calc(100vw - 48px)); max-width: 760px; }
 body.dsh-actions-run-confirmation-open [role='dialog'] p { white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
 
+/* Respect the Host Modal overlay's padded viewport. Only the fields scroll;
+   its own header and footer remain accessible without global dialog overrides. */
+.dsh-actions-params-modal { max-height: 100%; min-height: 0; }
+.dsh-actions-params-content { flex: 1 1 auto; min-height: 0; overflow: hidden; }
+.dsh-actions-params-content > :first-child { flex-shrink: 0; }
+.dsh-actions-params-content > p { flex-shrink: 0; max-height: 5em; overflow-y: auto; overflow-wrap: anywhere; }
+.dsh-actions-params-content > :last-child { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.dsh-actions-params-modal > :last-child { flex-shrink: 0; }
 /* Parameter form (T34, Modal-based): fields stack inside the dialog body. */
 .dsh-actions-param-field { display: flex; flex-direction: column; gap: 4px; }
 .dsh-actions-param-field + .dsh-actions-param-field { margin-top: 10px; }

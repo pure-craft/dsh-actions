@@ -26,6 +26,14 @@ describe('sidebar scrolling layout', () => {
     expect(panel).toContain("ctaLabel: t('ctaCreateWorkspace')");
     expect(panel).not.toContain('workspaceActions.length > 0 ?');
   });
+  it('bounds long parameter dialogs and scrolls fields without hiding footer actions', () => {
+    expect(panel).toContain("className: 'dsh-actions-params-modal'");
+    expect(panel).toContain("contentClassName: 'dsh-actions-params-content'");
+    expect(ACTIONS_CSS).toContain('.dsh-actions-params-modal { max-height: 100%; min-height: 0; }');
+    expect(ACTIONS_CSS).toContain('.dsh-actions-params-content { flex: 1 1 auto; min-height: 0; overflow: hidden; }');
+    expect(ACTIONS_CSS).toContain('.dsh-actions-params-content > :last-child { min-height: 0; overflow-y: auto;');
+    expect(ACTIONS_CSS).toContain('.dsh-actions-params-modal > :last-child { flex-shrink: 0; }');
+  });
   it('keeps degradation banners independent of the header', () => {
     expect(ACTIONS_CSS).not.toMatch(/\.dsh-actions-header\s*\/\* Source degradation banner/);
   });

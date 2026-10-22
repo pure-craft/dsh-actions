@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.5.2 — 2026-10-22
+
+### Fixed
+
+- Keep parameter dialogs inside the Host modal's padded viewport when an Action has many inputs. Scroll the fields internally while keeping the title, close control and footer actions accessible.
+- Bound long Action descriptions without affecting other dialogs.
+
+### Verified
+
+- Typecheck, lint and 486 automated tests passed; Host and Client production bundles built successfully.
+- Local user acceptance covered the long parameter form. Added checks are source-level layout contracts, not browser geometry tests.
+- No Action configuration schema or execution permission changes.
+
 ## 0.5.1 — 2026-10-22
 
 ### Fixed
