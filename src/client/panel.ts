@@ -1085,7 +1085,7 @@ function RunWorkspace(props: {
   // by the list rows; a first run raises the workspace automatically).
   if (tabs.length === 0) return h(React.Fragment, null);
 
-  return h('section', { className: 'dsh-actions-runs' },
+  return h('section', { className: 'dsh-actions-runs', 'data-collapsed': collapsed },
     state.closeRunConfirm !== null
       ? h(CloseRunBar, { key: state.closeRunConfirm.runId, pending: state.closeRunConfirm, store, t })
       : null,
@@ -1128,6 +1128,20 @@ export function ActionsPanel(deps: PanelDeps): React.ReactElement {
   );
   React.useSyncExternalStore(store.subscribe, store.getRevision);
 
+  const pageRef = React.useRef<HTMLElement | null>(null);
+  const dockRef = React.useRef<HTMLDivElement | null>(null);
+  React.useLayoutEffect(() => {
+    const dock = dockRef.current;
+    const page = pageRef.current;
+    if (dock === null || page === null) return;
+    const measure = (): void => {
+      page.style.setProperty('--dsh-actions-dock-height', `${dock.getBoundingClientRect().height}px`);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(dock);
+    return () => { observer.disconnect(); page.style.removeProperty('--dsh-actions-dock-height'); };
+  }, []);
   const sessionId = deps.sessionId ?? '';
   const useSessions = deps.useSessions ?? fallbackUseSessions;
   const sessionCwd = useSessions((snapshot) => sessionId === '' ? undefined : snapshot.byId[sessionId]?.cwd);
@@ -1366,7 +1380,7 @@ export function ActionsPanel(deps: PanelDeps): React.ReactElement {
     });
   }
 
-  return h('main', { className: 'dsh-actions-page', 'data-dsh-plugin': 'dsh-actions', 'data-dsh-surface': deps.surface ?? 'conversation-view' },
+  return h('main', { ref: pageRef, className: 'dsh-actions-page', 'data-dsh-plugin': 'dsh-actions', 'data-dsh-surface': deps.surface ?? 'conversation-view' },
     h('div', { className: 'dsh-actions-content' },
       h('header', { className: 'dsh-actions-header' },
         h('div', { className: 'dsh-actions-header-text' },
@@ -1391,7 +1405,7 @@ export function ActionsPanel(deps: PanelDeps): React.ReactElement {
         ),
       ),
       h('div', { className: 'dsh-actions-list' }, listBody),
-      workspace,
+      h('div', { ref: dockRef, className: 'dsh-actions-dock' }, workspace),
     ),
   );
 }

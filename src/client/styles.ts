@@ -4,13 +4,14 @@ export const ACTIONS_CSS = `
 .dsh-actions-content { width: 100%; max-width: 960px; height: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
 /* The list region is the only scrolling region of the three. */
 .dsh-actions-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; }
+.dsh-actions-list > * { flex-shrink: 0; }
+.dsh-actions-header, .dsh-actions-runs { flex-shrink: 0; }
 
 /* Header: title + subtitle + read-only session workspace path, refresh at right */
 .dsh-actions-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .dsh-actions-header-text { min-width: 0; }
 .dsh-actions-header h1 { margin: 0; font-size: 20px; font-weight: 500; line-height: 28px; }
 .dsh-actions-header p { margin: 4px 0 0; color: var(--dsw-alias-label-secondary); font-size: 13px; line-height: 20px; }
-.dsh-actions-header 
 /* Source degradation banner */
 .dsh-actions-banner { border: 1px solid var(--dsw-alias-state-warn-tertiary); border-radius: 10px; background: var(--dsw-alias-bg-layer-1); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
 .dsh-actions-banner-row { display: flex; align-items: center; gap: 8px; font-size: 13px; line-height: 20px; }
@@ -151,8 +152,16 @@ body.dsh-actions-run-confirmation-open [role='dialog'] p { white-space: pre-wrap
 .dsh-actions-tv-row-label { color: var(--dsw-alias-label-primary); }
 
 /* Right-sidebar home: the narrow column compacts the same panel */
-.dsh-actions-page[data-dsh-surface='sidebar-right'] { padding: 12px 10px 32px; }
-.dsh-actions-page[data-dsh-surface='sidebar-right'] .dsh-actions-content { max-width: none; gap: 12px; }
+/* Bound the page to the tab viewport, not to its scrollable content height.
+   The list owns scrolling; the run dock floats above its reserved bottom space. */
+.dsh-actions-page[data-dsh-surface='sidebar-right'] { position: relative; flex: 1; height: 100%; min-height: 0; min-width: 0; overflow: hidden; padding: 12px 10px 0; }
+.dsh-actions-page[data-dsh-surface='sidebar-right'] .dsh-actions-content { position: relative; height: 100%; min-height: 0; max-width: none; gap: 12px; }
+.dsh-actions-page[data-dsh-surface='sidebar-right'] .dsh-actions-list { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding-bottom: calc(var(--dsh-actions-dock-height, 0px) + 20px); scroll-padding-bottom: calc(var(--dsh-actions-dock-height, 0px) + 20px); }
+.dsh-actions-page[data-dsh-surface='sidebar-right'] .dsh-actions-dock { position: absolute; bottom: 0; left: 0; right: 0; z-index: 1; max-height: 55%; display: flex; flex-direction: column; }
+.dsh-actions-page[data-dsh-surface='sidebar-right'] .dsh-actions-runs { flex: 0 1 auto; margin: 0; min-height: 0; overflow: hidden; gap: 8px; }
+.dsh-actions-page[data-dsh-surface='sidebar-right'] .dsh-actions-tabs-row { flex: none; }
+.dsh-actions-page[data-dsh-surface='sidebar-right'] .dsh-actions-card { min-height: 0; overflow-y: auto; }
+.dsh-actions-page[data-dsh-surface='sidebar-right'] .dsh-actions-runs[data-collapsed='true'] { gap: 0; padding-bottom: 4px; }
 .dsh-actions-page[data-dsh-surface='sidebar-right'] .dsh-actions-header h1 { font-size: 15px; line-height: 22px; }
 .dsh-actions-page[data-dsh-surface='sidebar-right'] .dsh-actions-header p { font-size: 12px; line-height: 18px; }
 

@@ -25,7 +25,8 @@ The panel is the main entry point for people: the **Actions** card on the **Star
 
 The lower half of the panel is a permanent run workspace, modeled on VS Code's tasks + terminals:
 
-- each run is a tab (runs across tasks line up on one tab strip; it scrolls horizontally on overflow with edge fade); clicking a task in the list only focuses its newest tab, it does not replace the whole area; the workspace collapses/expands as a whole with a fixed height, and renders nothing when there is no run at all.
+- Actions form a flat, vertically scrolling list within the available pane. The run dock floats at the bottom, expanding upward and retaining only its tab strip when collapsed. List bottom spacing follows the dock's measured height plus breathing room, so the last task can scroll fully clear of it. Long output scrolls within its bounded card. Workspace, global and session sections retain their headings and available create controls even when empty.
+- each run is a tab (runs across tasks line up on one tab strip; it scrolls horizontally on overflow with edge fade); clicking a task in the list only focuses its newest tab, it does not replace the whole area; the run area collapses/expands as a whole and adapts to its output (up to 45% of the viewport height), and renders nothing when there is no run at all.
 - output and cancellation are independent per tab and never mix; an active tab can be stopped, a finished one can be forgotten (closing an active tab first goes through a "terminate and close" confirmation).
 - focus rules differ by presentation mode: `new` does not steal focus (it follows a new run only if you are already looking at the latest run), while `dedicated` / `append` refresh the tab in place. The three modes are described in the [configuration reference](https://github.com/pure-craft/dsh-actions/blob/main/docs/features/configuration.en.md).
 
